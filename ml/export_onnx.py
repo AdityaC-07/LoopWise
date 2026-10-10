@@ -56,6 +56,25 @@ def main(argv: list[str] | None = None) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     model = YOLO(str(weights))
+
+    names = load_names(repo_root)
+    yaml_list = [names[k] for k in sorted(names)]
+    try:
+        ckpt_raw = model.names
+        ckpt_list = ([ckpt_raw[k] for k in sorted(ckpt_raw, key=int)]
+                     if isinstance(ckpt_raw, dict) else list(ckpt_raw))
+    except AttributeError:
+        ckpt_list = None
+        print("WARN: checkpoint carries no `names`; relying on output-count check only.")
+    if ckpt_list is not None and ckpt_list != yaml_list:
+        print("ERROR: class order mismatch between checkpoint and ml/data.yaml.\n"
+              f"  checkpoint: {ckpt_list}\n"
+              f"  data.yaml : {yaml_list}\n"
+              "Refusing to export: the CLASS_INDEX_MAP would mislabel every prediction. "
+              "Retrain with ml/train.py (it generates a canonical data.yaml) or fix ml/data.yaml.",
+              file=sys.stderr)
+        return 2
+
     exported = model.export(format="onnx", opset=args.opset or None)
     exported_path = Path(exported)
     if exported_path.resolve() != out.resolve():
@@ -78,7 +97,6 @@ def main(argv: list[str] | None = None) -> int:
     outputs = sess.run(None, {inp.name: dummy})
     print(f"Smoke inference OK: input {shape} -> output {[list(o.shape) for o in outputs]}")
 
-    names = load_names(repo_root)
     n_out = outputs[0].shape[-1] if len(outputs[0].shape) >= 1 else 0
     if n_out != len(names):
         print(f"ERROR: model outputs {n_out} classes but data.yaml defines {len(names)}. "
