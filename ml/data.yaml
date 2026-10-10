@@ -1,0 +1,24 @@
+# LoopWise waste dataset configuration (TEMPLATE — dataset not yet present).
+#
+# Task type: image CLASSIFICATION (Ultralytics `yolo classify`).
+# Layout expected under <dataset-root>/ :
+#   train/<material_id>/*.jpg   val/<material_id>/*.jpg   test/<material_id>/*.jpg
+#
+# Canonical class order below is FIXED (index 0-7). It must match
+# ml/classes.json and the generated CLASS_INDEX_MAP exactly. Do not reorder
+# without re-exporting the mapping and bumping MODEL_VERSION.
+
+path: ./data/waste-classify   # dataset root (override with --data in train.py)
+train: train
+val: val
+test: test
+
+names:
+  0: plastic_pet_bottle
+  1: composite_tetrapack
+  2: organic_food_waste
+  3: paper_cardboard_box
+  4: hazardous_battery_aa
+  5: glass_bottle_beverage
+  6: metal_can_aluminum
+  7: e_waste_mobile_charger

@@ -1,0 +1,32 @@
+# Env & secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+alembic/versions/__pycache__/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ML artefacts (large / local-only)
+ml/.venv/
+ml/data/
+ml/runs/
+ml/models/*.onnx
+ml/models/*.pt
+
+# OS / editors
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.log

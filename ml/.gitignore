@@ -1,0 +1,7 @@
+# Local ML artefacts — never commit weights, datasets, or runs.
+.venv/
+data/
+runs/
+models/*.onnx
+models/*.pt
+__pycache__/

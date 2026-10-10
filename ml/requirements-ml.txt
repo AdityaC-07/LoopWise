@@ -1,0 +1,24 @@
+# LoopWise ML training dependencies (SEPARATE from backend runtime).
+#
+# Install into a DEDICATED virtualenv, never into backend/.venv:
+#   python -m venv ml/.venv
+#   ml/.venv/Scripts/python -m pip install -r ml/requirements-ml.txt
+#
+# Rationale: torch alone is ~200 MB andGPU/CPU wheels differ per machine.
+# The production backend needs only onnxruntime + Pillow (see
+# backend/requirements.txt) to serve an exported .onnx file.
+#
+# Python: 3.12 (match backend). torch CPU build for local Windows training.
+# For GPU training (CUDA 12.x), replace torch lines per https://pytorch.org
+# and set --device 0 in ml/train.py.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.4,<3.0
+torchvision>=0.19,<1.0
+ultralytics>=8.3,<9.0
+onnx>=1.17,<2.0
+onnxruntime>=1.19,<2.0
+numpy>=1.26,<3.0
+Pillow>=10.4,<12.0
+PyYAML>=6.0,<7.0
+tqdm>=4.66,<5.0
