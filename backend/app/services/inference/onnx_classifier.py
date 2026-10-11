@@ -10,6 +10,7 @@ from PIL import Image
 from app.services.inference.base import BaseClassifier
 from app.services.inference.result import ClassificationResult, MaterialGuidance, DisposalGuidance
 from app.services.inference.mock import MockClassifier, UNKNOWN_MATERIAL, get_material_entry
+from app.services.inference.broad_classes import get_broad_entry
 from app.core.errors import InferenceFailedError
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,13 @@ class ONNXClassifier(BaseClassifier):
             raise FileNotFoundError(f"ONNX model file at '{model_path}' could not be loaded: {e}")
 
     def _load_class_map(self, class_index_map: Optional[str]) -> Dict[int, str]:
-        """Load index->material_id mapping from JSON file; fall back to pool order."""
+        """Load index->material_id mapping from JSON file.
+
+        Fail-safe: if the map is missing or unparseable the mapping is EMPTY,
+        which makes every prediction resolve to the honest "unknown" result —
+        silently guessing an order (e.g. pool order) would mislabel every
+        prediction under the broad-class taxonomy.
+        """
         if class_index_map and os.path.exists(class_index_map):
             try:
                 with open(class_index_map, "r", encoding="utf-8") as f:
@@ -57,9 +64,19 @@ class ONNXClassifier(BaseClassifier):
                     logger.info(f"Loaded {len(mapping)} class mappings from {class_index_map}.")
                     return mapping
             except Exception as e:
-                logger.warning(f"Could not parse CLASS_INDEX_MAP '{class_index_map}': {e}. Using pool order.")
-        from app.services.inference.mock import MOCK_MATERIAL_POOL
-        return {i: entry["material_id"] for i, entry in enumerate(MOCK_MATERIAL_POOL)}
+                logger.warning(f"Could not parse CLASS_INDEX_MAP '{class_index_map}': {e}.")
+        logger.error(
+            "CLASS_INDEX_MAP missing or unusable — predictions will be reported as "
+            "'unknown' (fail-safe, no guessing)."
+        )
+        return {}
+
+    def _lookup_entry(self, material_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Resolve a predicted class to guidance: specific demo pool first,
+        then the honest broad-class entries (ml/classes.json taxonomy)."""
+        if not material_id:
+            return None
+        return get_material_entry(material_id) or get_broad_entry(material_id)
 
     @property
     def model_version(self) -> str:
@@ -126,7 +143,7 @@ class ONNXClassifier(BaseClassifier):
             return self._unknown_genuine_result(best_conf, class_ids, confidences)
 
         material_id = self._index_to_class.get(class_ids[0])
-        entry = get_material_entry(material_id) if material_id else None
+        entry = self._lookup_entry(material_id)
         if entry is None:
             logger.warning(f"ONNX predicted unmapped class index {class_ids[0]}; returning unknown.")
             return self._unknown_genuine_result(best_conf, class_ids, confidences)

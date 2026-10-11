@@ -21,6 +21,7 @@ dist-ssr/
 ml/.venv/
 ml/data/
 ml/runs/
+runs/
 ml/models/*.onnx
 ml/models/*.pt
 
@@ -29,6 +30,10 @@ ml/models/*.pt
 *.db-shm
 *.db-wal
 loopwise.db
+
+# Model weights / exports (auto-downloaded checkpoints, e.g. yolo26n-cls.pt)
+*.pt
+*.onnx
 
 # OS / editors
 .DS_Store

@@ -1,10 +1,10 @@
 {
-  "0": "plastic_pet_bottle",
-  "1": "composite_tetrapack",
-  "2": "organic_food_waste",
-  "3": "paper_cardboard_box",
-  "4": "hazardous_battery_aa",
-  "5": "glass_bottle_beverage",
-  "6": "metal_can_aluminum",
-  "7": "e_waste_mobile_charger"
+  "0": "battery_hazardous",
+  "1": "glass",
+  "2": "metal",
+  "3": "organic",
+  "4": "other_residue",
+  "5": "paper_cardboard",
+  "6": "plastic",
+  "7": "textile"
 }

@@ -1,24 +1,31 @@
-# LoopWise waste dataset configuration (TEMPLATE — dataset not yet present).
+# LoopWise waste dataset configuration (broad material taxonomy, Option 1).
 #
 # Task type: image CLASSIFICATION (Ultralytics `yolo classify`).
 # Layout expected under <dataset-root>/ :
-#   train/<material_id>/*.jpg   val/<material_id>/*.jpg   test/<material_id>/*.jpg
+#   train/<class_name>/*.jpg   val/<class_name>/*.jpg   test/<class_name>/*.jpg
 #
 # Canonical class order below is FIXED (index 0-7). It must match
 # ml/classes.json and the generated CLASS_INDEX_MAP exactly. Do not reorder
 # without re-exporting the mapping and bumping MODEL_VERSION.
+#
+# Names are in ALPHABETICAL order on purpose: Ultralytics derives class
+# indices for folder-based classification datasets by sorting folder names,
+# so this file, ml/classes.json, the train/val/test folders and the exported
+# class-index map all agree by construction. ml/prepare_dataset.py generates
+# the per-dataset copy; ml/export_onnx.py verifies the checkpoint's own
+# `names` against this file before writing CLASS_INDEX_MAP.
 
-path: ./data/waste-classify   # dataset root (override with --data in train.py)
+path: ./data/waste-classify   # dataset root (train.py overrides with an absolute path)
 train: train
 val: val
 test: test
 
 names:
-  0: plastic_pet_bottle
-  1: composite_tetrapack
-  2: organic_food_waste
-  3: paper_cardboard_box
-  4: hazardous_battery_aa
-  5: glass_bottle_beverage
-  6: metal_can_aluminum
-  7: e_waste_mobile_charger
+  0: battery_hazardous
+  1: glass
+  2: metal
+  3: organic
+  4: other_residue
+  5: paper_cardboard
+  6: plastic
+  7: textile

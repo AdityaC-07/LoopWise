@@ -1,0 +1,23 @@
+{
+  "kaggle12": {
+    "title": "Garbage Classification (12 classes)",
+    "author": "Mostafa Mohamed (Kaggle: mostafaabla)",
+    "url": "https://www.kaggle.com/datasets/mostafaabla/garbage-classification",
+    "license": "Database: Open Database; Contents: Database Contents (ODbL-style). Attribution required; verify the license on the dataset page before redistribution.",
+    "notes": "15,515 JPEG images in 12 folder-per-class labels. Local copy: ml/data/raw/ (read-only source). Folder names use hyphens (brown-glass); model class names use underscores.",
+    "map": {
+      "battery": "battery_hazardous",
+      "biological": "organic",
+      "brown-glass": "glass",
+      "cardboard": "paper_cardboard",
+      "clothes": "textile",
+      "green-glass": "glass",
+      "metal": "metal",
+      "paper": "paper_cardboard",
+      "plastic": "plastic",
+      "shoes": "textile",
+      "trash": "other_residue",
+      "white-glass": "glass"
+    }
+  }
+}
