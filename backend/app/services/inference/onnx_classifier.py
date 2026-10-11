@@ -11,20 +11,46 @@ from app.services.inference.base import BaseClassifier
 from app.services.inference.result import ClassificationResult, MaterialGuidance, DisposalGuidance
 from app.services.inference.mock import MockClassifier, UNKNOWN_MATERIAL, get_material_entry
 from app.services.inference.broad_classes import get_broad_entry
+from app.services.inference.preprocess import preprocess_image, DEFAULT_INPUT_SIZE, NUM_CHANNELS
 from app.core.errors import InferenceFailedError
 
 logger = logging.getLogger(__name__)
 
 LOW_CONFIDENCE_THRESHOLD = 0.35
 
+# --- ONNX output contract -------------------------------------------------
+# The deployed model (yolo26n-cls-v1, exported by ml/export_onnx.py) has a
+# Softmax classification head: its [1, C] output is ALREADY a probability
+# distribution (verified against the artefact: finite, within [0, 1], sums to
+# 1.0). Applying softmax again on such an output caps the maximum confidence at
+# e / (e + C - 1) ≈ 0.28 for C = 8, silently breaking thresholding. The default
+# semantics is therefore "probabilities". A genuinely different model that
+# returns raw logits must opt in explicitly via MODEL_OUTPUT="logits"; the
+# classifier never guesses (and never softmaxes twice).
+DEFAULT_OUTPUT_SEMANTICS = "probabilities"
+VALID_OUTPUT_SEMANTICS = ("probabilities", "logits")
+
+# Documented tolerance for the "sums to one" validation of probability output.
+# A genuine softmax head sums to 1 within fp32 rounding (~1e-6); 2% absorbs
+# platform/quantisation drift while still rejecting malformed vectors.
+OUTPUT_SUM_TOLERANCE = 0.02
+# Probabilities must be non-negative; a tiny epsilon absorbs fp32 rounding.
+PROB_NEG_EPSILON = 1e-6
+
+
+class ModelOutputError(ValueError):
+    """Raised when an ONNX output violates the configured output contract."""
+
 
 class ONNXClassifier(BaseClassifier):
     """ONNX Runtime Waste Classifier for production mode."""
 
-    def __init__(self, model_path: str, class_index_map: Optional[str] = None):
+    def __init__(self, model_path: str, class_index_map: Optional[str] = None,
+                 output_semantics: Optional[str] = None):
         self._model_path = model_path
         self._class_index_map = class_index_map
         self._index_to_class: Dict[int, str] = self._load_class_map(class_index_map)
+        self._output_semantics = self._resolve_output_semantics(output_semantics)
         try:
             from app.core.config import get_settings as _get_settings
             self._model_version = _get_settings().MODEL_VERSION or "yolo26-v1"
@@ -71,6 +97,29 @@ class ONNXClassifier(BaseClassifier):
         )
         return {}
 
+    def _resolve_output_semantics(self, output_semantics: Optional[str]) -> str:
+        """Resolve the configured ONNX output semantics.
+
+        Precedence: explicit argument > MODEL_OUTPUT setting > default
+        ("probabilities"). Unknown values fall back to the safe default with a
+        loud error log rather than guessing a semantics.
+        """
+        value = output_semantics
+        if value is None:
+            try:
+                from app.core.config import get_settings
+                value = getattr(get_settings(), "MODEL_OUTPUT", None)
+            except Exception:
+                value = None
+        value = (value or DEFAULT_OUTPUT_SEMANTICS).strip().lower()
+        if value not in VALID_OUTPUT_SEMANTICS:
+            logger.error(
+                "Unknown MODEL_OUTPUT semantics '%s'; using '%s'.",
+                value, DEFAULT_OUTPUT_SEMANTICS,
+            )
+            return DEFAULT_OUTPUT_SEMANTICS
+        return value
+
     def _lookup_entry(self, material_id: Optional[str]) -> Optional[Dict[str, Any]]:
         """Resolve a predicted class to guidance: specific demo pool first,
         then the honest broad-class entries (ml/classes.json taxonomy)."""
@@ -104,6 +153,8 @@ class ONNXClassifier(BaseClassifier):
                 self._run_inference(image_bytes, description),
                 timeout=5.0
             )
+        except InferenceFailedError:
+            raise
         except asyncio.TimeoutError:
             logger.error("ONNX inference timed out after 5.0 seconds.")
             raise InferenceFailedError("Inference timed out. Please try again.")
@@ -114,14 +165,12 @@ class ONNXClassifier(BaseClassifier):
     async def _run_inference(self, image_bytes: bytes, description: Optional[str]) -> ClassificationResult:
         """Run GENUINE ONNX inference. Never substitutes mock output as genuine."""
         try:
-            import numpy as np  # type: ignore
-        except ImportError:
-            raise InferenceFailedError("Production model dependencies are unavailable on this server.")
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        target_h, target_w = self._target_hw()
-        image = image.resize((target_w, target_h))
-        arr = np.asarray(image).astype(np.float32) / 255.0
-        arr = np.transpose(arr, (2, 0, 1))[np.newaxis, ...]  # NCHW
+            arr = self._preprocess(image_bytes)
+        except InferenceFailedError:
+            raise
+        except Exception as e:
+            logger.error(f"Could not decode/preprocess image: {e}")
+            raise InferenceFailedError("Could not decode the uploaded image.")
 
         def _infer() -> Any:
             if not self._input_name:
@@ -130,14 +179,19 @@ class ONNXClassifier(BaseClassifier):
             return outputs[0] if outputs else None
 
         loop = asyncio.get_running_loop()
-        logits = await loop.run_in_executor(None, _infer)
-        if logits is None:
+        output = await loop.run_in_executor(None, _infer)
+        if output is None:
             raise InferenceFailedError("Production model returned no output.")
 
-        class_ids, confidences = self._parse_logits(logits)
-        if not class_ids:
+        try:
+            probs = self._interpret_output(output)
+        except ModelOutputError as e:
+            logger.error(f"Rejected ONNX model output: {e}")
+            raise InferenceFailedError("Production model returned an invalid output.")
+        if not probs:
             raise InferenceFailedError("Could not interpret production model output.")
 
+        class_ids, confidences = self._rank(probs)
         best_conf = confidences[0]
         if best_conf < LOW_CONFIDENCE_THRESHOLD:
             return self._unknown_genuine_result(best_conf, class_ids, confidences)
@@ -192,46 +246,107 @@ class ONNXClassifier(BaseClassifier):
         except Exception:
             return (640, 640)
 
-    def _parse_logits(self, logits: Any) -> tuple:
-        """Return (class_ids, softmax confidences) sorted desc. Supports 2D
-        classification logits [1, C] and YOLO-style detection [1, C+4, N].
-        Pure-Python (no numpy required) so the module imports without ML deps."""
-        data = logits.tolist() if hasattr(logits, "tolist") else logits
+    def _input_size(self) -> int:
+        """Square input edge length from the model, or DEFAULT_INPUT_SIZE."""
+        h, w = self._target_hw()
+        if h == w:
+            return h if h > 0 else DEFAULT_INPUT_SIZE
+        # The reference classification transform is square; a non-square input
+        # is not something this model contract supports. Use the shorter edge
+        # and let the runtime surface a shape mismatch rather than guessing.
+        logger.warning("Non-square model input %dx%d; using %d for preprocessing.", w, h, min(h, w))
+        return min(h, w)
+
+    def _preprocess(self, image_bytes: bytes) -> Any:
+        """Decode + transform an uploaded image to the NCHW model input.
+
+        Uses the shared reference-matching transform (shortest-edge BILINEAR
+        resize -> centre crop -> /255, no ImageNet mean/std). See
+        app.services.inference.preprocess and ml/evaluate.py --preprocess backend.
+        """
+        image = Image.open(io.BytesIO(image_bytes))
+        size = self._input_size()
+        arr = preprocess_image(image, size)
+        expected_shape = (1, NUM_CHANNELS, size, size)
+        if tuple(arr.shape) != expected_shape:
+            raise InferenceFailedError(
+                f"Preprocessing produced shape {tuple(arr.shape)}, expected {expected_shape}."
+            )
+        return arr
+
+    def _flatten_class_scores(self, output: Any) -> List[float]:
+        """Return a 1-D list of class scores, or [] for unsupported shapes.
+
+        Accepts [C] and [1, C]. Anything else (e.g. detection tensors such as
+        [1, C+4, N]) is rejected rather than guessed: this model contract is a
+        single-image classification output.
+        """
+        data = output.tolist() if hasattr(output, "tolist") else output
+        if isinstance(data, list) and len(data) == 1 and isinstance(data[0], list):
+            data = data[0]  # unwrap the leading batch dimension
+        if not isinstance(data, list) or any(isinstance(v, list) for v in data):
+            return []
         try:
-            class_scores: List[float] = []
-            if isinstance(data, list) and data and isinstance(data[0], list):
-                if data[0] and isinstance(data[0][0], list):
-                    # 3D [1, rows, cols]: YOLO detection, first 4 rows are boxes.
-                    rows = data[0]
-                    if len(rows) > 4:
-                        class_rows = rows[4:]
-                        n_boxes = len(rows[0])
-                        best_box, best_val = 0, float("-inf")
-                        for b in range(n_boxes):
-                            col_best = max(float(r[b]) for r in class_rows)
-                            if col_best > best_val:
-                                best_val, best_box = col_best, b
-                        class_scores = [float(r[best_box]) for r in class_rows]
-                    else:
-                        class_scores = [max(float(v) for v in row) for row in rows]
-                else:
-                    # 2D [1, C]
-                    row = data[0] if isinstance(data[0], list) else data
-                    class_scores = [float(v) for v in row]
-            elif isinstance(data, list):
-                class_scores = [float(v) for v in data]
-            else:
-                return ([], [])
-            if not class_scores:
-                return ([], [])
-            m = max(class_scores)
-            exps = [math.exp(s - m) for s in class_scores]
-            total = sum(exps)
-            probs = [e / total for e in exps]
-            order = sorted(range(len(probs)), key=lambda i: -probs[i])
-            return ([int(i) for i in order], [float(probs[i]) for i in order])
-        except Exception:
-            return ([], [])
+            return [float(v) for v in data]
+        except (TypeError, ValueError):
+            return []
+
+    @staticmethod
+    def _softmax(scores: List[float]) -> List[float]:
+        """Numerically stable softmax. Only used for LOGITS models."""
+        m = max(scores)
+        exps = [math.exp(s - m) for s in scores]
+        total = sum(exps)
+        if total <= 0.0 or not math.isfinite(total):
+            raise ModelOutputError("softmax produced a non-finite normalisation")
+        return [e / total for e in exps]
+
+    def _interpret_output(self, output: Any) -> List[float]:
+        """Validate and return the probability vector in class-index order.
+
+        Behaviour is driven by the configured semantics:
+          * "probabilities" (default): the output must already be a valid
+            distribution (finite, non-negative, summing to ~1 within
+            ``OUTPUT_SUM_TOLERANCE``). It is validated and used DIRECTLY — never
+            re-normalised, never softmaxed again.
+          * "logits": finite scores receive a numerically stable softmax.
+
+        Raises ``ModelOutputError`` on any malformed/inconsistent output so the
+        caller returns an honest failure instead of a fabricated prediction.
+        """
+        scores = self._flatten_class_scores(output)
+        if not scores:
+            raise ModelOutputError("output is not a 1-D score vector")
+
+        expected = len(self._index_to_class)
+        if expected and len(scores) != expected:
+            raise ModelOutputError(
+                f"expected {expected} class scores, got {len(scores)}"
+            )
+
+        if not all(math.isfinite(s) for s in scores):
+            raise ModelOutputError("output contains NaN or infinite values")
+
+        semantics = getattr(self, "_output_semantics", DEFAULT_OUTPUT_SEMANTICS)
+        if semantics == "logits":
+            return self._softmax(scores)
+
+        # semantics == "probabilities"
+        if any(s < -PROB_NEG_EPSILON for s in scores):
+            raise ModelOutputError("probability output contains negative values")
+        total = sum(scores)
+        if abs(total - 1.0) > OUTPUT_SUM_TOLERANCE:
+            raise ModelOutputError(
+                f"probability output sums to {total:.6f}, "
+                f"outside tolerance {OUTPUT_SUM_TOLERANCE}"
+            )
+        return [float(s) for s in scores]
+
+    @staticmethod
+    def _rank(probs: List[float]) -> tuple:
+        """Return (class_ids, confidences) sorted by descending confidence."""
+        order = sorted(range(len(probs)), key=lambda i: -probs[i])
+        return ([int(i) for i in order], [float(probs[i]) for i in order])
 
     def _unknown_genuine_result(self, best_conf: float, class_ids: List[int], confidences: List[float]) -> ClassificationResult:
         """Honest low-confidence result from the GENUINE model (is_demo=False)."""

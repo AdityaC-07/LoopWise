@@ -107,14 +107,20 @@ async def test_gibberish_description_returns_unknown():
 
 @pytest.mark.asyncio
 async def test_onnx_logits_parsing_orders_classes():
-    """Genuine-model helper: softmax orders classes without inventing accuracy."""
+    """LOGITS semantics (explicitly configured) softmax and order classes.
+
+    The default semantics is "probabilities"; a raw-logits vector must only be
+    softmaxed when the model is explicitly declared as a logits model.
+    """
     from app.services.inference.onnx_classifier import ONNXClassifier
     clf = object.__new__(ONNXClassifier)
     clf._index_to_class = {0: "plastic_pet_bottle", 1: "organic_food_waste", 2: "paper_cardboard_box"}
     clf._input_shape = [1, 3, 640, 640]
     clf._input_name = "input"
     clf._model_path = "test"
-    ids, confs = clf._parse_logits([[2.0, 1.0, 0.1]])
+    clf._output_semantics = "logits"
+    probs = clf._interpret_output([[2.0, 1.0, 0.1]])
+    ids, confs = clf._rank(probs)
     assert ids[0] == 0
     assert abs(sum(confs) - 1.0) < 1e-5
     assert confs == sorted(confs, reverse=True)

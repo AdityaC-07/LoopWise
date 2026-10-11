@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     MODEL_PATH: str | None = None
     CLASS_INDEX_MAP: str | None = None
     MODEL_VERSION: str = "yolo26-v1"  # bump when deploying fine-tuned weights (e.g. yolo26n-cls-v1)
+    # ONNX output semantics. The exported yolov8/26-cls head already contains
+    # Softmax, so its output is a probability distribution -> "probabilities"
+    # (default). A model that returns raw logits MUST opt in with "logits";
+    # the classifier never guesses and never applies softmax twice.
+    MODEL_OUTPUT: Literal["probabilities", "logits"] = "probabilities"
     S3_BUCKET: str | None = None
     AWS_REGION: str = "ap-south-1"
     

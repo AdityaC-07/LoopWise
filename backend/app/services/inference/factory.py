@@ -29,7 +29,8 @@ def get_classifier() -> BaseClassifier:
         from app.services.inference.onnx_classifier import ONNXClassifier
         return ONNXClassifier(
             model_path=settings.MODEL_PATH,
-            class_index_map=settings.CLASS_INDEX_MAP
+            class_index_map=settings.CLASS_INDEX_MAP,
+            output_semantics=getattr(settings, "MODEL_OUTPUT", None),
         )
     except Exception as e:
         logger.error(f"Failed to initialize ONNXClassifier: {e}. Falling back to MockClassifier.")

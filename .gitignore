@@ -21,7 +21,10 @@ dist-ssr/
 ml/.venv/
 ml/data/
 ml/runs/
+ml/runs_*/
 runs/
+runs_*/
+ml/models/
 ml/models/*.onnx
 ml/models/*.pt
 
