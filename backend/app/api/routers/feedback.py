@@ -61,16 +61,16 @@ async def submit_feedback(
     # Enforce rate limiting
     check_rate_limit(str(payload.session_id))
 
-    correction_id = uuid.uuid4()
+    correction_id = str(uuid.uuid4())
     db_connected = await check_db_connection()
 
     if db_connected and db is not None:
         try:
             # Check event exists
-            stmt = select(ClassificationEvent).where(ClassificationEvent.event_id == payload.event_id)
+            stmt = select(ClassificationEvent).where(ClassificationEvent.event_id == str(payload.event_id))
             res = await db.execute(stmt)
             event = res.scalar_one_or_none()
-            
+
             if event:
                 if str(event.session_id) != str(payload.session_id):
                     raise SessionMismatchError()
@@ -78,8 +78,8 @@ async def submit_feedback(
                 if payload.feedback_type == "correction":
                     correction = UserCorrection(
                         correction_id=correction_id,
-                        event_id=payload.event_id,
-                        session_id=payload.session_id,
+                        event_id=str(payload.event_id),
+                        session_id=str(payload.session_id),
                         user_id=None,
                         corrected_class=payload.corrected_class,
                         correction_note=payload.note,

@@ -1,14 +1,13 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, Float, Date, DateTime, JSON, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.models.database import Base
 
 
 class WardAnalyticsRollup(Base):
     __tablename__ = "ward_analytics_rollups"
 
-    rollup_id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rollup_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     ward_id = Column(String(32), nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
     total_events = Column(Integer, default=0, nullable=False)

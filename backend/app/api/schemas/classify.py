@@ -23,18 +23,36 @@ class ClassifyRequest(BaseModel):
     def validate_inputs(self):
         if not self.image_b64 and not self.description:
             raise InvalidInputError("Please add a photo or describe the item before submitting.")
-        
+
         if self.image_b64:
             try:
                 # Remove data header if present (e.g. data:image/jpeg;base64,)
                 raw_b64 = self.image_b64
                 if "," in raw_b64:
                     raw_b64 = raw_b64.split(",", 1)[1]
-                
+
                 decoded = base64.b64decode(raw_b64)
-                if len(decoded) > 5 * 1024 * 1024:  # 5 MB
+
+                # Check size: max 5 MB
+                if len(decoded) > 5 * 1024 * 1024:
                     raise ImageTooLargeError("That photo is too large. Please try a smaller photo.")
-            except ImageTooLargeError:
+
+                # Validate image format by checking magic bytes
+                # JPEG: FF D8 FF
+                # PNG: 89 50 4E 47
+                # WebP: 52 49 46 46 ... 57 45 42 50
+                if len(decoded) < 4:
+                    raise UnsupportedFormatError("We couldn't read that file. Please use a JPEG or PNG photo.")
+
+                magic_bytes = decoded[:4]
+                is_jpeg = magic_bytes.startswith(b'\xFF\xD8\xFF')
+                is_png = magic_bytes == b'\x89PNG'
+                is_webp = magic_bytes == b'RIFF' and len(decoded) >= 12 and decoded[8:12] == b'WEBP'
+
+                if not (is_jpeg or is_png or is_webp):
+                    raise UnsupportedFormatError("We couldn't read that file. Please use a JPEG or PNG photo.")
+
+            except (ImageTooLargeError, UnsupportedFormatError):
                 raise
             except Exception:
                 raise UnsupportedFormatError("We couldn't read that file. Please use a JPEG or PNG photo.")

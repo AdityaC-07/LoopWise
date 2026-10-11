@@ -2,7 +2,6 @@ import enum
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, Float, Boolean, Text, DateTime, ForeignKey, Index, Enum, JSON
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.models.database import Base
 
@@ -42,9 +41,9 @@ class RecoveryPotentialEnum(str, enum.Enum):
 class ClassificationEvent(Base):
     __tablename__ = "classification_events"
 
-    event_id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(PG_UUID(as_uuid=True), nullable=False, index=True)
-    user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True)
+    event_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     ward_id = Column(String(32), nullable=True, index=True)
     input_type = Column(Enum(InputTypeEnum, name="inputtypeenum"), nullable=False)
@@ -57,7 +56,7 @@ class ClassificationEvent(Base):
     recovery_potential = Column(Enum(RecoveryPotentialEnum, name="recoverypotentialenum"), nullable=False)
     recovery_channel = Column(String(64), nullable=True)
     is_corrected = Column(Boolean, default=False, nullable=False, index=True)
-    correction_id = Column(PG_UUID(as_uuid=True), ForeignKey("user_corrections.correction_id"), nullable=True)
+    correction_id = Column(String(36), ForeignKey("user_corrections.correction_id"), nullable=True)
     image_stored = Column(Boolean, default=False, nullable=False)
     image_key = Column(Text, nullable=True)
     consent_flags = Column(JSON, nullable=True)

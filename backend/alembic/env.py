@@ -18,6 +18,9 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
+# Detect if using SQLite for cross-platform migration support
+is_sqlite = "sqlite" in settings.DATABASE_URL.lower()
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
@@ -27,6 +30,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=is_sqlite,  # Enable batch mode for SQLite (required for ALTER TABLE)
     )
 
     with context.begin_transaction():
@@ -34,7 +38,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=is_sqlite,  # Enable batch mode for SQLite
+    )
     with context.begin_transaction():
         context.run_migrations()
 

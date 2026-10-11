@@ -24,6 +24,12 @@ ml/runs/
 ml/models/*.onnx
 ml/models/*.pt
 
+# Local database files (SQLite)
+*.db
+*.db-shm
+*.db-wal
+loopwise.db
+
 # OS / editors
 .DS_Store
 .vscode/*

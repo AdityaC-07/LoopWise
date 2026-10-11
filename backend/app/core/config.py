@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     
     # Data Stores
-    DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/loopwise"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./loopwise.db"
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # ML & Storage

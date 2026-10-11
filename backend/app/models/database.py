@@ -8,12 +8,17 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Detect database type from URL
+is_postgres = "postgresql" in settings.DATABASE_URL.lower()
+is_sqlite = "sqlite" in settings.DATABASE_URL.lower()
+
 # Engine creation with connection pool settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
-    pool_pre_ping=True,
+    pool_pre_ping=True if is_postgres else False,  # SQLite doesn't support pre_ping
+    connect_args={"check_same_thread": False} if is_sqlite else {},
 )
 
 AsyncSessionLocal = async_sessionmaker(

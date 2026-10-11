@@ -136,7 +136,8 @@ async def test_analytics_ward_endpoint():
 async def test_classify_image_only_returns_unknown_demo():
     import base64
     session_id = str(uuid.uuid4())
-    fake_img = base64.b64encode(b"fake-plastic-bottle-photo-bytes").decode("utf-8")
+    # Use minimal valid JPEG magic bytes
+    fake_img = base64.b64encode(b'\xFF\xD8\xFF\xE0\x00\x10JFIF').decode("utf-8")
     payload = {
         "session_id": session_id,
         "input_type": "image",

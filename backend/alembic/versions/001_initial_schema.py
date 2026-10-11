@@ -20,7 +20,7 @@ def upgrade() -> None:
     # Users table
     op.create_table(
         'users',
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('user_id', sa.String(36), nullable=False),  # UUID as string for SQLite compatibility
         sa.Column('email', sa.String(length=255), nullable=True),
         sa.Column('role', sa.Enum('resident', 'society_manager', 'operator', 'municipal', 'admin', name='userroleenum'), nullable=False),
         sa.Column('ward_id', sa.String(length=32), nullable=True),
@@ -53,10 +53,10 @@ def upgrade() -> None:
     # User Corrections table
     op.create_table(
         'user_corrections',
-        sa.Column('correction_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('event_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('session_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('correction_id', sa.String(36), nullable=False),  # UUID as string for SQLite compatibility
+        sa.Column('event_id', sa.String(36), nullable=False),
+        sa.Column('session_id', sa.String(36), nullable=False),
+        sa.Column('user_id', sa.String(36), nullable=True),
         sa.Column('corrected_class', sa.String(length=64), nullable=False),
         sa.Column('correction_note', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
@@ -70,9 +70,9 @@ def upgrade() -> None:
     # Classification Events table
     op.create_table(
         'classification_events',
-        sa.Column('event_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('session_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('event_id', sa.String(36), nullable=False),  # UUID as string for SQLite compatibility
+        sa.Column('session_id', sa.String(36), nullable=False),
+        sa.Column('user_id', sa.String(36), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('ward_id', sa.String(length=32), nullable=True),
         sa.Column('input_type', sa.Enum('image', 'text', name='inputtypeenum'), nullable=False),
@@ -85,7 +85,7 @@ def upgrade() -> None:
         sa.Column('recovery_potential', sa.Enum('high', 'medium', 'low', 'none', name='recoverypotentialenum'), nullable=False),
         sa.Column('recovery_channel', sa.String(length=64), nullable=True),
         sa.Column('is_corrected', sa.Boolean(), nullable=False, server_default='false'),
-        sa.Column('correction_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('correction_id', sa.String(36), nullable=True),
         sa.Column('image_stored', sa.Boolean(), nullable=False, server_default='false'),
         sa.Column('image_key', sa.Text(), nullable=True),
         sa.Column('consent_flags', sa.JSON(), nullable=True),
@@ -101,13 +101,18 @@ def upgrade() -> None:
     op.create_index('idx_events_corrected_created', 'classification_events', ['is_corrected', 'created_at'])
     op.create_index('idx_events_demo_created', 'classification_events', ['demo_mode', 'created_at'])
 
-    # Add foreign key from user_corrections back to classification_events
-    op.create_foreign_key('fk_user_corrections_event_id', 'user_corrections', 'classification_events', ['event_id'], ['event_id'])
+    # Add foreign key from user_corrections back to classification_events.
+    # Deferred because classification_events is created after user_corrections
+    # (circular FK). Explicit batch block: SQLite recreates the table
+    # (copy-and-move) for ALTER constraints; on PostgreSQL recreate="auto"
+    # renders a plain ALTER with no table copy.
+    with op.batch_alter_table("user_corrections", recreate="auto") as batch_op:
+        batch_op.create_foreign_key('fk_user_corrections_event_id', 'classification_events', ['event_id'], ['event_id'])
 
     # Ward Analytics Rollups table
     op.create_table(
         'ward_analytics_rollups',
-        sa.Column('rollup_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('rollup_id', sa.String(36), nullable=False),  # UUID as string for SQLite compatibility
         sa.Column('ward_id', sa.String(length=32), nullable=False),
         sa.Column('date', sa.Date(), nullable=False),
         sa.Column('total_events', sa.Integer(), nullable=False, server_default='0'),

@@ -79,13 +79,13 @@ export interface Material {
   material_id: string;
   name: string;
   category: string;
-  subcategory: string;
+  subcategory?: string;
   disposal_bin: string;
   recovery_potential: string;
-  next_life: string;
-  recovery_channel: string;
-  contamination_notes: string;
-  icon_slug: string;
+  next_life?: string;
+  recovery_channel?: string;
+  contamination_notes?: string;
+  icon_slug?: string;
   demo_seed: boolean;
 }
 

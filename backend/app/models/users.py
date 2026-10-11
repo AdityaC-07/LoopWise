@@ -2,7 +2,6 @@ import enum
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Enum, JSON
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 from app.models.database import Base
 
@@ -18,7 +17,7 @@ class UserRoleEnum(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    user_id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String(255), unique=True, nullable=True, index=True)
     role = Column(Enum(UserRoleEnum, name="userroleenum"), nullable=False, default=UserRoleEnum.resident)
     ward_id = Column(String(32), nullable=True)

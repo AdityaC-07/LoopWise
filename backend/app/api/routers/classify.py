@@ -60,8 +60,8 @@ async def classify_item(
     if db_connected and db is not None:
         try:
             event = ClassificationEvent(
-                event_id=uuid.UUID(result.event_id),
-                session_id=payload.session_id,
+                event_id=str(result.event_id),
+                session_id=str(payload.session_id),
                 user_id=None,
                 ward_id=payload.ward_id,
                 input_type=InputTypeEnum.image if payload.image_b64 else InputTypeEnum.text,

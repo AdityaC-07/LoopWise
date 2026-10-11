@@ -155,7 +155,7 @@ export function filterMaterials(
       !q ||
       m.name.toLowerCase().includes(q) ||
       m.category.toLowerCase().includes(q) ||
-      m.subcategory.toLowerCase().includes(q);
+      (m.subcategory?.toLowerCase().includes(q) ?? false);
     const matchesCategory =
       !category || category === 'all' || m.category.toLowerCase() === category.toLowerCase();
     return matchesSearch && matchesCategory;
