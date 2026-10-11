@@ -77,6 +77,29 @@ alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000   # http://localhost:8000
 ```
 
+### Run genuine ONNX inference on Windows
+
+The default configuration is explicitly labelled demo mode. To run the
+checked-in classifier with real image bytes, use a PowerShell session and set
+all production inference settings before starting the backend:
+
+```powershell
+cd "C:\Users\Agniv Dutta\LoopWise\backend"
+.venv\Scripts\Activate.ps1
+$env:DEMO_MODE="false"
+$env:MODEL_PATH="C:\Users\Agniv Dutta\LoopWise\ml\models\loopwise-yolo26n-cls.onnx"
+$env:CLASS_INDEX_MAP="C:\Users\Agniv Dutta\LoopWise\ml\models\loopwise-yolo26n-cls.class-index-map.json"
+$env:MODEL_VERSION="yolo26n-cls-v1"
+$env:MODEL_OUTPUT="probabilities"
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Verify `GET http://127.0.0.1:8000/api/v1/health` reports
+`components.inference_engine` as `ok` and `demo_mode` as `false`. If the
+model or class map cannot be loaded, health reports `degraded` and the API
+does not silently switch to mock inference. Image bytes are processed in
+memory unless `consent.image_upload` is enabled.
+
 ### Tests
 
 ```powershell
@@ -342,7 +365,7 @@ REDIS_URL=redis://localhost:6379/0
 
 MODEL_PATH=                    # leave blank to force demo mode
 CLASS_INDEX_MAP=
-MODEL_VERSION=yolo26-v1
+MODEL_VERSION=yolo26n-cls-v1
 MODEL_OUTPUT=probabilities     # or "logits" for a raw-logits model
 S3_BUCKET=
 AWS_REGION=ap-south-1

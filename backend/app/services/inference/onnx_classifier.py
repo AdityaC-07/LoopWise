@@ -53,9 +53,9 @@ class ONNXClassifier(BaseClassifier):
         self._output_semantics = self._resolve_output_semantics(output_semantics)
         try:
             from app.core.config import get_settings as _get_settings
-            self._model_version = _get_settings().MODEL_VERSION or "yolo26-v1"
+            self._model_version = _get_settings().MODEL_VERSION or "yolo26n-cls-v1"
         except Exception:
-            self._model_version = "yolo26-v1"
+            self._model_version = "yolo26n-cls-v1"
 
         try:
             import onnxruntime as ort
@@ -129,7 +129,7 @@ class ONNXClassifier(BaseClassifier):
 
     @property
     def model_version(self) -> str:
-        return getattr(self, "_model_version", "yolo26-v1")
+        return getattr(self, "_model_version", "yolo26n-cls-v1")
 
     @property
     def is_demo(self) -> bool:

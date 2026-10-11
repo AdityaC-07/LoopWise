@@ -31,7 +31,7 @@ class ClassifyRequest(BaseModel):
                 if "," in raw_b64:
                     raw_b64 = raw_b64.split(",", 1)[1]
 
-                decoded = base64.b64decode(raw_b64)
+                decoded = base64.b64decode(raw_b64, validate=True)
 
                 # Check size: max 5 MB
                 if len(decoded) > 5 * 1024 * 1024:

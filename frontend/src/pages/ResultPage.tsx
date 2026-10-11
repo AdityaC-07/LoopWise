@@ -135,7 +135,7 @@ export default function ResultPage() {
         )}
       </div>
 
-      {/* Uncertain demo result — photo could not be visually recognised */}
+      {/* Uncertain result — explain whether this came from demo or real inference. */}
       {result.predicted_class === 'unknown' && (
         <div
           style={{
@@ -148,10 +148,12 @@ export default function ResultPage() {
           role="alert"
         >
           <div style={{ fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 4 }}>
-            Demo simulation — photo not recognised.
+            {demoMode ? 'Demo simulation — photo not recognised.' : 'Photo not recognised with enough confidence.'}
           </div>
           <div style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-            The demo cannot analyse photos, so this is not a verified image recognition result.
+            {demoMode
+              ? 'The demo cannot analyse photos, so this is not a verified image recognition result.'
+              : 'The model did not produce a confident material classification from this photo.'}{' '}
             Please describe the item in words or pick the closest material below, and check your
             local waste rules when unsure.
           </div>

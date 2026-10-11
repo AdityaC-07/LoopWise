@@ -148,4 +148,5 @@ export interface HealthData {
   model_version?: string;
   demo_mode: boolean;
   environment?: string;
+  inference_error?: string;
 }

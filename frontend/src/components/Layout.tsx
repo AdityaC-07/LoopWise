@@ -23,7 +23,7 @@ interface LayoutProps {
   demoMode?: boolean;
 }
 
-export function Layout({ children, demoMode = true }: LayoutProps) {
+export function Layout({ children, demoMode }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
 

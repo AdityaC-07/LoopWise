@@ -140,6 +140,6 @@ async def test_onnx_low_confidence_returns_genuine_unknown():
 def test_model_version_default_and_onnx_fallback():
     from app.core.config import get_settings
     from app.services.inference.onnx_classifier import ONNXClassifier
-    assert get_settings().MODEL_VERSION == "yolo26-v1"
+    assert get_settings().MODEL_VERSION == "yolo26n-cls-v1"
     # Instances built without __init__ (e.g. in unit tests) still report honestly.
-    assert ONNXClassifier.model_version.fget(object.__new__(ONNXClassifier)) == "yolo26-v1"
+    assert ONNXClassifier.model_version.fget(object.__new__(ONNXClassifier)) == "yolo26n-cls-v1"

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Tour, useTour } from './components/Tour';
@@ -8,15 +9,23 @@ import AnalyticsOverviewPage from './pages/AnalyticsOverviewPage';
 import WardDetailPage from './pages/WardDetailPage';
 import MaterialsPage from './pages/MaterialsPage';
 import HelpPage from './pages/HelpPage';
+import { getHealth } from './api/client';
 
 /** App chrome (topbar + sidebar/tabbar) wrapping all dashboard/classify routes. */
 function AppShell() {
   const { showTour, closeTour } = useTour();
+  const [demoMode, setDemoMode] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    getHealth()
+      .then((response) => setDemoMode(response.meta.demo_mode))
+      .catch(() => setDemoMode(undefined));
+  }, []);
 
   return (
     <>
       {showTour && <Tour onClose={closeTour} />}
-      <Layout demoMode={true}>
+      <Layout demoMode={demoMode}>
         <Outlet />
       </Layout>
     </>

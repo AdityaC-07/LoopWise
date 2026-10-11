@@ -5,10 +5,10 @@ interface PracticeModeIndicatorProps {
   demoMode?: boolean;
 }
 
-export function PracticeModeIndicator({ demoMode = true }: PracticeModeIndicatorProps) {
+export function PracticeModeIndicator({ demoMode }: PracticeModeIndicatorProps) {
   const [showTooltip, setShowTooltip] = useState(false);
 
-  if (!demoMode) return null;
+  if (demoMode !== true) return null;
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -52,7 +52,9 @@ export function PracticeModeIndicator({ demoMode = true }: PracticeModeIndicator
   );
 }
 
-export function PracticeModeTooltip() {
+export function PracticeModeTooltip({ demoMode }: PracticeModeIndicatorProps) {
+  if (demoMode !== true) return null;
+
   return (
     <div
       style={{

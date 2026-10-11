@@ -33,6 +33,11 @@ class InferenceFailedError(LoopWiseException):
         super().__init__(code="INFERENCE_FAILED", message=message, status_code=500)
 
 
+class InferenceConfigurationError(LoopWiseException):
+    def __init__(self, message: str = "Real image classification is not configured. Please contact the administrator."):
+        super().__init__(code="INFERENCE_NOT_CONFIGURED", message=message, status_code=503)
+
+
 class WardUnknownError(LoopWiseException):
     def __init__(self, message: str = "We don't recognise that ward. Please choose a ward from the list."):
         super().__init__(code="WARD_UNKNOWN", message=message, status_code=422)

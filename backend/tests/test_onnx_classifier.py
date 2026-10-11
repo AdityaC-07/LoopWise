@@ -200,15 +200,14 @@ def test_missing_class_map_is_empty_and_fails_safe():
     assert clf._load_class_map(str(REPO_ROOT / "no-such-map.json")) == {}
 
 
-def test_factory_falls_back_to_mock_without_model(monkeypatch):
+def test_factory_rejects_missing_model_without_mock_fallback(monkeypatch):
     from app.services.inference import factory
+    from app.core.errors import InferenceConfigurationError
 
-    monkeypatch.setattr(factory, "_FALLBACK_TO_MOCK", False)
     monkeypatch.setattr(factory.settings, "DEMO_MODE", False, raising=False)
     monkeypatch.setattr(factory.settings, "MODEL_PATH", None, raising=False)
-    clf = factory.get_classifier()
-    assert clf.is_demo is True  # never claims real inference is active
-    assert clf.model_version == "mock-v1"
+    with pytest.raises(InferenceConfigurationError):
+        factory.get_classifier()
 
 
 def test_unknown_semantics_falls_back_to_default():

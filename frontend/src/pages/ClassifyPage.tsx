@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Upload, X, HelpCircle } from 'lucide-react';
-import { classifyItem } from '../api/client';
+import { classifyItem, getHealth } from '../api/client';
 import { getSessionId } from '../utils/session';
 import { fileToBase64 } from '../utils/display';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -31,6 +31,13 @@ export default function ClassifyPage() {
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [showConsentTooltip, setShowConsentTooltip] = useState(false);
+  const [demoMode, setDemoMode] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    getHealth()
+      .then((response) => setDemoMode(response.meta.demo_mode))
+      .catch(() => setDemoMode(undefined));
+  }, []);
 
   const hasInput = !!(imageFile || description.trim());
 
@@ -123,7 +130,7 @@ export default function ClassifyPage() {
         Take a photo or describe the item to find out which bin it belongs in.
       </p>
 
-      <PracticeModeTooltip />
+      <PracticeModeTooltip demoMode={demoMode} />
 
       {error && (
         <div style={{ marginBottom: 16 }}>

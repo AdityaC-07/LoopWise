@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter
 from app.core.config import get_settings
+from app.core.errors import InferenceConfigurationError
 from app.core.response import build_response_envelope
 from app.models.database import check_db_connection
 from app.services.inference.factory import get_classifier
@@ -18,8 +19,14 @@ async def health_check():
     db_ok = await check_db_connection()
     db_status = "ok" if db_ok else "unreachable"
 
-    classifier = get_classifier()
-    inference_status = "mock" if classifier.is_demo else "ok"
+    classifier = None
+    inference_error = None
+    try:
+        classifier = get_classifier()
+        inference_status = "mock" if classifier.is_demo else "ok"
+    except InferenceConfigurationError as exc:
+        inference_status = "unavailable"
+        inference_error = exc.message
 
     # Redis check
     cache_status = "ok"
@@ -41,13 +48,15 @@ async def health_check():
             "cache": cache_status,
             "image_store": storage_status
         },
-        "model_version": classifier.model_version,
+        "model_version": classifier.model_version if classifier else settings.MODEL_VERSION,
         "demo_mode": settings.DEMO_MODE
     }
+    if inference_error:
+        health_data["inference_error"] = inference_error
 
     return build_response_envelope(
-        status="ok",
+        status="ok" if inference_status != "unavailable" else "degraded",
         data=health_data,
-        model_version=classifier.model_version,
+        model_version=classifier.model_version if classifier else settings.MODEL_VERSION,
         demo_mode=settings.DEMO_MODE
     )
