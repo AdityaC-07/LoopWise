@@ -82,6 +82,31 @@ export function formatPercent(val: number): string {
   return `${Math.round(val * 100)}%`;
 }
 
+/**
+ * Other ranked candidates from top3, excluding the predicted class and any
+ * "unknown" placeholders.
+ *
+ * The model's errors are confidently wrong (test set: incorrect predictions
+ * have median confidence 0.76, p75 0.98), while the true class still lands in
+ * the top-3 for 98.8% of images. Surfacing the runners-up is therefore the
+ * cheapest honest safety net for a high-confidence misread.
+ */
+export function otherMatches(
+  top3: Array<{ class: string; confidence: number }> | undefined,
+  predictedClass: string
+): Array<{ class: string; confidence: number }> {
+  if (!top3 || top3.length === 0) return [];
+  const seen = new Set<string>([predictedClass]);
+  const out: Array<{ class: string; confidence: number }> = [];
+  for (const item of top3) {
+    if (!item || !item.class || item.class === 'unknown') continue;
+    if (seen.has(item.class)) continue;
+    seen.add(item.class);
+    out.push(item);
+  }
+  return out;
+}
+
 /** Format a number with commas */
 export function formatNumber(n: number): string {
   return n.toLocaleString('en-IN');

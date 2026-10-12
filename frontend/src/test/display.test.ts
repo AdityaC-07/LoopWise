@@ -10,6 +10,7 @@ import {
   wardStatus,
   friendlyClassName,
   filterMaterials,
+  otherMatches,
 } from '../utils/display';
 import type { Material } from '../types/api';
 
@@ -187,5 +188,58 @@ describe('filterMaterials', () => {
   });
   it('returns empty when no match', () => {
     expect(filterMaterials(mockMaterials, 'zzz', 'all')).toHaveLength(0);
+  });
+});
+
+describe('otherMatches', () => {
+  // Regression lock for the "confidently wrong" failure mode: a real plastic
+  // bottle photo was ranked metal 0.86 / plastic 0.09 / glass 0.03. The UI used
+  // to hide the runners-up at high confidence, so the true class never surfaced.
+  const top3 = [
+    { class: 'metal', confidence: 0.86 },
+    { class: 'plastic', confidence: 0.09 },
+    { class: 'glass', confidence: 0.03 },
+  ];
+
+  it('surfaces the true class behind a confident misread', () => {
+    expect(otherMatches(top3, 'metal')).toEqual([
+      { class: 'plastic', confidence: 0.09 },
+      { class: 'glass', confidence: 0.03 },
+    ]);
+  });
+
+  it('excludes the predicted class', () => {
+    expect(otherMatches(top3, 'metal').map((i) => i.class)).not.toContain('metal');
+  });
+
+  it('drops unknown placeholders used by the genuine low-confidence result', () => {
+    const uncertain = [
+      { class: 'unknown', confidence: 0.2 },
+      { class: 'plastic', confidence: 0.18 },
+      { class: 'glass', confidence: 0.16 },
+    ];
+    expect(otherMatches(uncertain, 'unknown')).toEqual([
+      { class: 'plastic', confidence: 0.18 },
+      { class: 'glass', confidence: 0.16 },
+    ]);
+  });
+
+  it('de-duplicates repeated classes', () => {
+    expect(
+      otherMatches(
+        [
+          { class: 'plastic', confidence: 0.7 },
+          { class: 'plastic', confidence: 0.2 },
+        ],
+        'metal'
+      )
+    ).toEqual([{ class: 'plastic', confidence: 0.7 }]);
+  });
+
+  it('returns empty for undefined, empty, or fully-predicted top3', () => {
+    expect(otherMatches(undefined, 'metal')).toEqual([]);
+    expect(otherMatches([], 'metal')).toEqual([]);
+    expect(otherMatches(top3, 'metal').length).toBeGreaterThan(0);
+    expect(otherMatches([{ class: 'metal', confidence: 1 }], 'metal')).toEqual([]);
   });
 });

@@ -8,7 +8,13 @@ import { MaterialBadge } from '../components/MaterialBadge';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { submitFeedback, getMaterials } from '../api/client';
 import { getSessionId } from '../utils/session';
-import { confidenceTier, friendlyClassName, binColor } from '../utils/display';
+import {
+  confidenceTier,
+  friendlyClassName,
+  binColor,
+  otherMatches,
+  formatPercent,
+} from '../utils/display';
 import type { ClassifyResult, Material } from '../types/api';
 
 type FeedbackState = 'idle' | 'confirming' | 'correcting' | 'submitted';
@@ -91,6 +97,12 @@ export default function ResultPage() {
   }
 
   const tier = confidenceTier(result.confidence);
+  // Runners-up are always worth showing: the model can be confidently wrong,
+  // and the true class is usually still ranked second or third.
+  const otherCandidates =
+    result.predicted_class === 'unknown'
+      ? []
+      : otherMatches(result.top3, result.predicted_class);
 
   return (
     <div className="content-area" style={{ maxWidth: 560 }}>
@@ -285,6 +297,38 @@ export default function ResultPage() {
       <div id="result-confidence-bar" style={{ marginBottom: 24 }}>
         <ConfidenceBar confidence={result.confidence} confidenceLabel={result.confidence_label} />
       </div>
+
+      {/* Runners-up — the low-confidence tier already offers a full picker. */}
+      {tier !== 'low' && otherCandidates.length > 0 && (
+        <div id="result-other-matches" style={{ marginBottom: 24 }}>
+          <div className="section-label">Other possible matches</div>
+          <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', margin: '0 0 10px', lineHeight: 1.5 }}>
+            The model can confuse similar materials, so a confident answer is not always the
+            right one. If this isn't correct, pick the closest match below.
+          </p>
+          <div className="card" style={{ padding: '4px 16px' }}>
+            {otherCandidates.map((item) => (
+              <div
+                key={item.class}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 0',
+                  borderTop: '1px solid var(--color-border)',
+                }}
+              >
+                <span style={{ flex: 1, fontSize: 14, color: 'var(--color-text-primary)' }}>
+                  {friendlyClassName(item.class)}
+                </span>
+                <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
+                  {formatPercent(item.confidence)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Medium confidence — confirmation card */}
       {tier === 'medium' && feedbackState === 'idle' && (
