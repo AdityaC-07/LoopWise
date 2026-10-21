@@ -47,7 +47,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="Comma-separated confidence thresholds for the coverage sweep")
     ap.add_argument("--out", required=True, help="Output directory (usually the run directory)")
     ap.add_argument("--limit", type=int, default=0, help="Optional cap per class (0 = all)")
+    ap.add_argument("--imgsz", type=int, default=0,
+                    help="Square input edge. 0 (default) derives it from the ONNX input "
+                         "shape, so a 384x384 model is evaluated at 384 and never "
+                         "silently resampled to 224.")
     return ap.parse_args(argv)
+
+
+def derive_input_size(inp) -> tuple[int, str]:
+    """Return (size, note) read from the ONNX model input metadata.
+
+    Deriving rather than hardcoding keeps one evaluator usable for every
+    deployed model version: V1 is 224x224 and V2 is 384x384. Feeding a 384 model
+    a 224 tensor would either crash or, worse, silently measure the wrong
+    pipeline. Falls back to 224 only when the metadata is unusable.
+    """
+    shape = list(inp.shape or [])
+    if len(shape) == 4:
+        h, w = shape[2], shape[3]
+        if isinstance(h, int) and isinstance(w, int) and h > 0 and w > 0:
+            if h != w:
+                return min(h, w), f"non-square input {w}x{h}; using the shorter edge"
+            return h, "derived from ONNX input shape"
+    return 224, "WARN: could not derive input size from metadata; defaulted to 224"
 
 
 def load_names(path: Path) -> dict[int, str]:
@@ -299,13 +321,14 @@ def main(argv: list[str] | None = None) -> int:
     names = load_names(Path(args.class_map))
     classes = [names[i] for i in sorted(names)]
     data_root = Path(args.data)
-    size = 224
     thresholds = [float(x) for x in args.thresholds.split(",")]
 
     sess = ort.InferenceSession(str(onnx_path))
     inp = sess.get_inputs()[0]
     input_name = inp.name
+    size, size_note = (args.imgsz, "explicit --imgsz override") if args.imgsz else derive_input_size(inp)
     print(f"model input: {inp.name} {inp.shape}", file=sys.stderr)
+    print(f"input size: {size} ({size_note})", file=sys.stderr)
     print(f"classes ({len(classes)}): {classes}", file=sys.stderr)
 
     transform = build_transform(args.preprocess, size)
@@ -318,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
         "classes": classes,
         "preprocess": args.preprocess,
         "input_shape": [str(d) for d in (inp.shape or [])],
+        "input_size": size,
         "splits": {},
     }
 
