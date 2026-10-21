@@ -27,6 +27,7 @@ runs_*/
 ml/models/
 ml/models/*.onnx
 ml/models/*.pt
+ml/loopwise-v2-artifacts/
 
 # Local database files (SQLite)
 *.db
