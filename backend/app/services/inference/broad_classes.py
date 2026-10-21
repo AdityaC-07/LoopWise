@@ -4,15 +4,14 @@ The trained classifier (see ml/classes.json) predicts broad material
 categories only — it cannot identify subtypes such as plastic resin codes,
 battery chemistry, glass colour, or specific electronic components. These
 entries therefore give honest, category-level disposal guidance and NEVER
-claim a specific subtype. Detailed per-material guidance for the demo mode
-lives in app.services.inference.mock.
+claim a specific subtype.
 
 Entries are ordered to match ml/classes.json (alphabetical broad classes),
 which is also the class-index order used by the exported ONNX class map.
 
-Lookup order in ONNXClassifier: MOCK_MATERIAL_POOL first (specific demo
-material_ids), then BROAD_MATERIAL_GUIDANCE here. Anything missing from both
-is reported as "unknown" with safe check-local-rules guidance.
+Lookup order in ONNXClassifier: get_broad_entry here. Anything missing from
+the map, or any prediction below the confidence threshold, is reported as
+"unknown" using UNKNOWN_MATERIAL below.
 """
 
 from typing import Any, Dict, List, Optional
@@ -145,3 +144,22 @@ def get_broad_entry(material_id: Optional[str]) -> Optional[Dict[str, Any]]:
 
 def broad_class_ids() -> List[str]:
     return [entry["material_id"] for entry in BROAD_MATERIAL_GUIDANCE]
+
+
+# Honest guidance for a prediction the model could not make confidently, or
+# for a class index with no entry in the class-index map. Deliberately never
+# names a material: the user is asked to check local rules or pick manually.
+UNKNOWN_MATERIAL: Dict[str, Any] = {
+    "material_id": "unknown",
+    "name": "Unknown item — needs manual check",
+    "category": "other",
+    "disposal_bin": "rejected",
+    "bin_label": "Check local waste rules",
+    "recovery_potential": "none",
+    "next_life": "The model could not confidently identify this item. Please check your local waste rules or select the material manually.",
+    "recovery_channel": "manual_check",
+    "contamination_notes": "The photo was not recognised with enough confidence to be verified. When in doubt, keep the item separate and check local waste rules.",
+    "action": "The model was not confident about this photo. Please describe the item in words or pick the closest material below.",
+    "do": ["Describe the item in words (e.g. plastic bottle, newspaper, food scraps)", "Pick the closest material from the list", "Check your local waste rules when unsure"],
+    "do_not": ["Do not guess a bin from an uncertain result", "Do not put hazardous or e-waste items in the regular bins"],
+}

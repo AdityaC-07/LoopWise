@@ -289,7 +289,6 @@ for f in out_dir.iterdir():
 
 ```powershell
 cd backend
-$env:DEMO_MODE = "false"
 $env:MODEL_PATH = "C:\Users\Agniv Dutta\LoopWise\ml\models\loopwise-yolo26n-cls.onnx"
 $env:CLASS_INDEX_MAP = "C:\Users\Agniv Dutta\LoopWise\ml\models\loopwise-yolo26n-cls.class-index-map.json"
 $env:MODEL_VERSION = "yolo26s-cls-v2"

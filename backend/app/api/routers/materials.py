@@ -43,7 +43,7 @@ async def get_materials_list(db: Optional[AsyncSession] = Depends(get_db)):
             logger.warning(f"Error reading materials from DB: {e}. Falling back to seeds.")
 
     if not materials_list:
-        # Fallback to seed materials list for initial demo without DB
+        # Fallback to the seed materials list when the database is unavailable
         for m in SEED_MATERIALS:
             materials_list.append({
                 "material_id": m["material_id"],

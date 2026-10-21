@@ -29,12 +29,14 @@ class UnsupportedFormatError(LoopWiseException):
 
 
 class InferenceFailedError(LoopWiseException):
-    def __init__(self, message: str = "We couldn't identify this item. Try a clearer photo or describe it instead."):
+    """The classifier itself failed (model/runtime). NOT an 'unknown item' answer."""
+    def __init__(self, message: str = "Image classification is temporarily unavailable. Please check the server and try again."):
         super().__init__(code="INFERENCE_FAILED", message=message, status_code=500)
 
 
 class InferenceConfigurationError(LoopWiseException):
-    def __init__(self, message: str = "Real image classification is not configured. Please contact the administrator."):
+    """The classifier could not be loaded at all — no model, map or runtime."""
+    def __init__(self, message: str = "Image classification is temporarily unavailable. Please check the server and try again."):
         super().__init__(code="INFERENCE_NOT_CONFIGURED", message=message, status_code=503)
 
 

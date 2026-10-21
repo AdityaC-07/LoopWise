@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTour, Tour } from '../components/Tour';
-import { PlayCircle, HelpCircle, Camera, LayoutGrid, MapPin } from 'lucide-react';
+import { PlayCircle, Camera, LayoutGrid, MapPin } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getMaterials } from '../api/client';
 import { LoadingDots } from '../components/Loading';
@@ -204,26 +204,6 @@ export default function HelpPage() {
               })}
             </div>
           )}
-        </div>
-
-        {/* About Practice Mode */}
-        <div
-          style={{
-            background: 'var(--color-surface-2)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--card-radius)',
-            padding: '20px 24px',
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
-            <HelpCircle size={18} style={{ color: 'var(--color-amber)', flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
-            <div style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>About Practice Mode</div>
-          </div>
-          <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.6 }}>
-            LoopWise is currently running in Practice Mode. The classifications and data shown are
-            for demonstration — not real live data. This will be updated when the live system goes active.
-          </p>
         </div>
       </div>
     </>

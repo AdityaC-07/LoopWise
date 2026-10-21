@@ -4,7 +4,7 @@ import { ConfidenceBar } from '../components/ConfidenceBar';
 import { MaterialBadge } from '../components/MaterialBadge';
 import { StatusLight } from '../components/StatusLight';
 import { ErrorMessage, EmptyState } from '../components/ErrorMessage';
-import { PracticeModeIndicator, PracticeModeTooltip } from '../components/PracticeModeIndicator';
+import { ServiceStatusIndicator } from '../components/ServiceStatusIndicator';
 
 describe('ConfidenceBar', () => {
   it('renders plain language label', () => {
@@ -89,24 +89,6 @@ describe('EmptyState', () => {
     expect(screen.getByText('Try a different range.')).toBeDefined();
   });
 
-  describe('Practice mode indicators', () => {
-    it('only renders the top-bar indicator when demo mode is active', () => {
-      const { rerender } = render(<PracticeModeIndicator demoMode={false} />);
-      expect(screen.queryByText('Practice Mode — not live data')).toBeNull();
-
-      rerender(<PracticeModeIndicator demoMode />);
-      expect(screen.getByText('Practice Mode — not live data')).toBeDefined();
-    });
-
-    it('does not show the classify warning for real inference', () => {
-      const { rerender } = render(<PracticeModeTooltip demoMode={false} />);
-      expect(screen.queryByText('Practice Mode')).toBeNull();
-
-      rerender(<PracticeModeTooltip demoMode />);
-      expect(screen.getByText('Practice Mode')).toBeDefined();
-    });
-  });
-
   it('renders action when provided', () => {
     render(
       <EmptyState
@@ -116,5 +98,28 @@ describe('EmptyState', () => {
       />
     );
     expect(screen.getByText('Go back')).toBeDefined();
+  });
+});
+
+describe('ServiceStatusIndicator', () => {
+  it('reports readiness from backend health, not a hardcoded flag', () => {
+    const { rerender } = render(<ServiceStatusIndicator status="unavailable" />);
+    expect(screen.getByText('Image recognition unavailable')).toBeDefined();
+    expect(screen.getByRole('status').getAttribute('data-status')).toBe('unavailable');
+
+    rerender(<ServiceStatusIndicator status="ready" />);
+    expect(screen.getByText('Image recognition ready')).toBeDefined();
+    expect(screen.getByRole('status').getAttribute('data-status')).toBe('ready');
+  });
+
+  it('renders nothing while health status is still unknown', () => {
+    const { container } = render(<ServiceStatusIndicator status="unknown" />);
+    expect(container.textContent).toBe('');
+  });
+
+  it('contains no practice-mode wording', () => {
+    render(<ServiceStatusIndicator status="ready" />);
+    expect(screen.queryByText(/practice/i)).toBeNull();
+    expect(screen.queryByText(/not live data/i)).toBeNull();
   });
 });

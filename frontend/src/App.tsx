@@ -10,22 +10,27 @@ import WardDetailPage from './pages/WardDetailPage';
 import MaterialsPage from './pages/MaterialsPage';
 import HelpPage from './pages/HelpPage';
 import { getHealth } from './api/client';
+import type { ClassifierStatus } from './components/ServiceStatusIndicator';
 
 /** App chrome (topbar + sidebar/tabbar) wrapping all dashboard/classify routes. */
 function AppShell() {
   const { showTour, closeTour } = useTour();
-  const [demoMode, setDemoMode] = useState<boolean | undefined>(undefined);
+  const [classifierStatus, setClassifierStatus] = useState<ClassifierStatus>('unknown');
 
   useEffect(() => {
     getHealth()
-      .then((response) => setDemoMode(response.meta.demo_mode))
-      .catch(() => setDemoMode(undefined));
+      .then((response) => {
+        setClassifierStatus(
+          response.data.components?.inference_engine === 'ok' ? 'ready' : 'unavailable'
+        );
+      })
+      .catch(() => setClassifierStatus('unknown'));
   }, []);
 
   return (
     <>
       {showTour && <Tour onClose={closeTour} />}
-      <Layout demoMode={demoMode}>
+      <Layout classifierStatus={classifierStatus}>
         <Outlet />
       </Layout>
     </>

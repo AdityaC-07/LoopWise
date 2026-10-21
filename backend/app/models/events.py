@@ -47,7 +47,7 @@ class ClassificationEvent(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     ward_id = Column(String(32), nullable=True, index=True)
     input_type = Column(Enum(InputTypeEnum, name="inputtypeenum"), nullable=False)
-    model_version = Column(String(32), nullable=False, default="mock-v1")
+    model_version = Column(String(32), nullable=False, default="yolo26n-cls-v1")
     predicted_class = Column(String(64), nullable=False, index=True)
     confidence = Column(Float, nullable=False)
     top3_predictions = Column(JSON, nullable=True)
@@ -60,6 +60,10 @@ class ClassificationEvent(Base):
     image_stored = Column(Boolean, default=False, nullable=False)
     image_key = Column(Text, nullable=True)
     consent_flags = Column(JSON, nullable=True)
+    # Legacy column retained for schema stability: demo/mock classification no
+    # longer exists, so every event written now is False. Kept (rather than
+    # dropped by migration) so historical rows remain readable and the
+    # aggregator can still exclude them.
     demo_mode = Column(Boolean, default=False, nullable=False, index=True)
 
     # Relationships

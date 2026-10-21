@@ -9,10 +9,9 @@ from typing import Optional, List, Dict, Any
 from PIL import Image
 from app.services.inference.base import BaseClassifier
 from app.services.inference.result import ClassificationResult, MaterialGuidance, DisposalGuidance
-from app.services.inference.mock import MockClassifier, UNKNOWN_MATERIAL, get_material_entry
-from app.services.inference.broad_classes import get_broad_entry
+from app.services.inference.broad_classes import UNKNOWN_MATERIAL, get_broad_entry
 from app.services.inference.preprocess import preprocess_image, DEFAULT_INPUT_SIZE, NUM_CHANNELS
-from app.core.errors import InferenceFailedError
+from app.core.errors import InferenceFailedError, InvalidInputError, UnsupportedFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class ModelOutputError(ValueError):
 
 
 class ONNXClassifier(BaseClassifier):
-    """ONNX Runtime Waste Classifier for production mode."""
+    """ONNX Runtime Waste Classifier — the application's only classification path."""
 
     def __init__(self, model_path: str, class_index_map: Optional[str] = None,
                  output_semantics: Optional[str] = None):
@@ -121,19 +120,14 @@ class ONNXClassifier(BaseClassifier):
         return value
 
     def _lookup_entry(self, material_id: Optional[str]) -> Optional[Dict[str, Any]]:
-        """Resolve a predicted class to guidance: specific demo pool first,
-        then the honest broad-class entries (ml/classes.json taxonomy)."""
+        """Resolve a predicted class to its honest broad-class guidance entry."""
         if not material_id:
             return None
-        return get_material_entry(material_id) or get_broad_entry(material_id)
+        return get_broad_entry(material_id)
 
     @property
     def model_version(self) -> str:
         return getattr(self, "_model_version", "yolo26n-cls-v1")
-
-    @property
-    def is_demo(self) -> bool:
-        return False
 
     async def classify(
         self,
@@ -141,11 +135,12 @@ class ONNXClassifier(BaseClassifier):
         description: Optional[str] = None
     ) -> ClassificationResult:
         if not image_bytes:
-            # ONNX model handles images only. Text-only input honestly falls
-            # back to the transparent demo simulator (is_demo=True).
-            logger.warning("ONNXClassifier received text-only input; using demo simulator for text match.")
-            mock = MockClassifier()
-            return await mock.classify(image_bytes=None, description=description)
+            # Image-only inference: there is no text fallback path. A text-only
+            # request is rejected outright rather than answered from a guess.
+            logger.warning("ONNXClassifier received a request without image bytes.")
+            raise InvalidInputError(
+                "Please add a photo of the item. The description is optional, but the model needs an image to classify."
+            )
 
         try:
             # Perform preprocessing and inference within 5-second timeout
@@ -153,54 +148,57 @@ class ONNXClassifier(BaseClassifier):
                 self._run_inference(image_bytes, description),
                 timeout=5.0
             )
-        except InferenceFailedError:
+        except (InferenceFailedError, InvalidInputError, UnsupportedFormatError):
             raise
         except asyncio.TimeoutError:
             logger.error("ONNX inference timed out after 5.0 seconds.")
-            raise InferenceFailedError("Inference timed out. Please try again.")
+            raise InferenceFailedError("Image classification is temporarily unavailable. Please check the server and try again.")
         except Exception as e:
             logger.error(f"ONNX classification failed: {e}")
-            raise InferenceFailedError("Could not process image with production model.")
+            raise InferenceFailedError("Image classification is temporarily unavailable. Please check the server and try again.")
 
     async def _run_inference(self, image_bytes: bytes, description: Optional[str]) -> ClassificationResult:
-        """Run GENUINE ONNX inference. Never substitutes mock output as genuine."""
+        """Run genuine ONNX inference. Never substitutes a fabricated result."""
         try:
             arr = self._preprocess(image_bytes)
-        except InferenceFailedError:
+        except (InferenceFailedError, UnsupportedFormatError):
             raise
         except Exception as e:
+            # The upload already passed magic-byte validation, so a decode
+            # failure here means the file itself is broken — a user problem,
+            # reported as such rather than as a server outage.
             logger.error(f"Could not decode/preprocess image: {e}")
-            raise InferenceFailedError("Could not decode the uploaded image.")
+            raise UnsupportedFormatError("We couldn't read that photo. Please try a different JPEG or PNG photo.")
 
         def _infer() -> Any:
             if not self._input_name:
-                raise InferenceFailedError("Production model has no usable input.")
+                raise InferenceFailedError("Image classification is temporarily unavailable. Please check the server and try again.")
             outputs = self._session.run(None, {self._input_name: arr})
             return outputs[0] if outputs else None
 
         loop = asyncio.get_running_loop()
         output = await loop.run_in_executor(None, _infer)
         if output is None:
-            raise InferenceFailedError("Production model returned no output.")
+            raise InferenceFailedError("Image classification is temporarily unavailable. Please check the server and try again.")
 
         try:
             probs = self._interpret_output(output)
         except ModelOutputError as e:
             logger.error(f"Rejected ONNX model output: {e}")
-            raise InferenceFailedError("Production model returned an invalid output.")
+            raise InferenceFailedError("Image classification is temporarily unavailable. Please check the server and try again.")
         if not probs:
-            raise InferenceFailedError("Could not interpret production model output.")
+            raise InferenceFailedError("Image classification is temporarily unavailable. Please check the server and try again.")
 
         class_ids, confidences = self._rank(probs)
         best_conf = confidences[0]
         if best_conf < LOW_CONFIDENCE_THRESHOLD:
-            return self._unknown_genuine_result(best_conf, class_ids, confidences)
+            return self._unknown_result(best_conf, class_ids, confidences)
 
         material_id = self._index_to_class.get(class_ids[0])
         entry = self._lookup_entry(material_id)
         if entry is None:
             logger.warning(f"ONNX predicted unmapped class index {class_ids[0]}; returning unknown.")
-            return self._unknown_genuine_result(best_conf, class_ids, confidences)
+            return self._unknown_result(best_conf, class_ids, confidences)
 
         top3 = []
         for cid, conf in zip(class_ids[:3], confidences[:3]):
@@ -233,7 +231,6 @@ class ONNXClassifier(BaseClassifier):
             material=mat_guidance,
             guidance=disp_guidance,
             model_version=self.model_version,
-            is_demo=False,
         )
 
     def _target_hw(self) -> tuple:
@@ -348,8 +345,13 @@ class ONNXClassifier(BaseClassifier):
         order = sorted(range(len(probs)), key=lambda i: -probs[i])
         return ([int(i) for i in order], [float(probs[i]) for i in order])
 
-    def _unknown_genuine_result(self, best_conf: float, class_ids: List[int], confidences: List[float]) -> ClassificationResult:
-        """Honest low-confidence result from the GENUINE model (is_demo=False)."""
+    def _unknown_result(self, best_conf: float, class_ids: List[int], confidences: List[float]) -> ClassificationResult:
+        """Honest low-confidence result: a real model answer the user must verify.
+
+        This is a genuine (if uncertain) classification, NOT a service error.
+        A backend failure raises InferenceFailedError instead and never reaches
+        here, so an "unknown" answer is never used to mask an outage.
+        """
         top3 = [{"class": "unknown", "confidence": round(float(best_conf), 2)}]
         for cid, conf in zip(class_ids[:2], confidences[:2]):
             mid = self._index_to_class.get(cid)
@@ -362,13 +364,13 @@ class ONNXClassifier(BaseClassifier):
             category=UNKNOWN_MATERIAL["category"],
             disposal_bin=UNKNOWN_MATERIAL["disposal_bin"],
             recovery_potential=UNKNOWN_MATERIAL["recovery_potential"],
-            next_life="The trained model could not confidently identify this item. Please check your local waste rules or select the material manually.",
-            recovery_channel="manual_check",
-            contamination_notes="Genuine model output with low confidence — not verified. When in doubt, keep the item separate and check local waste rules.",
+            next_life=UNKNOWN_MATERIAL["next_life"],
+            recovery_channel=UNKNOWN_MATERIAL["recovery_channel"],
+            contamination_notes=UNKNOWN_MATERIAL["contamination_notes"],
         )
         disp_guidance = DisposalGuidance(
             bin_label=UNKNOWN_MATERIAL["bin_label"],
-            action="The model was not confident about this photo. Please describe the item in words or pick the closest material below.",
+            action=UNKNOWN_MATERIAL["action"],
             do=list(UNKNOWN_MATERIAL["do"]),
             do_not=list(UNKNOWN_MATERIAL["do_not"]),
         )
@@ -381,5 +383,4 @@ class ONNXClassifier(BaseClassifier):
             material=mat_guidance,
             guidance=disp_guidance,
             model_version=self.model_version,
-            is_demo=False,
         )

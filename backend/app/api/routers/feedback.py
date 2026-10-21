@@ -90,7 +90,7 @@ async def submit_feedback(
                     event.correction_id = correction_id
                     await db.commit()
             else:
-                logger.info(f"Event '{payload.event_id}' not in DB (mock/memory event). Feedback acknowledged.")
+                logger.info(f"Event '{payload.event_id}' is not persisted in the DB. Feedback acknowledged.")
         except (SessionMismatchError, RateLimitedError):
             raise
         except Exception as e:

@@ -16,6 +16,7 @@ from app.core.errors import (
 from app.api.routers import health, classify, feedback, materials, analytics
 from app.seeds.materials import seed_materials_database
 from app.seeds.demo_analytics import seed_demo_analytics_database
+from app.services.inference.factory import get_classifier
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,15 +29,30 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan context for startup and shutdown initialization."""
-    logger.info(f"Starting LoopWise API in {settings.ENVIRONMENT} mode (DEMO_MODE={settings.DEMO_MODE})")
-    
+    logger.info(f"Starting LoopWise API in {settings.ENVIRONMENT} mode")
+
+    # Real ONNX inference is the only classification path, so verify the
+    # classifier loads at startup. A failure is logged loudly and reported as
+    # "unavailable" by /health; /classify then returns an explicit 503. The
+    # server still starts so the failure is observable rather than a crash loop.
+    try:
+        classifier = get_classifier()
+        logger.info(
+            "ONNX classifier ready: model_version=%s, classes=%d",
+            classifier.model_version, len(classifier._index_to_class),
+        )
+    except Exception as e:
+        logger.error(
+            "ONNX classifier failed to load — classification is unavailable. %s", e
+        )
+
     # Attempt DB seed initialization (graceful skip if DB is offline)
     try:
         await seed_materials_database()
         await seed_demo_analytics_database()
     except Exception as e:
         logger.warning(f"Startup DB seed attempt skipped: {e}")
-        
+
     yield
     logger.info("Shutting down LoopWise API")
 
@@ -79,6 +95,5 @@ async def root():
         "name": "LoopWise API",
         "tagline": "Every Waste Item Has a Next Life",
         "version": "0.1.0",
-        "demo_mode": settings.DEMO_MODE,
         "docs": "/docs"
     }

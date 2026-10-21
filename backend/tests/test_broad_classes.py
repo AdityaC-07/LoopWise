@@ -2,9 +2,8 @@
 
 The trained classifier outputs the 8 broad classes in ml/classes.json. These
 tests guarantee the backend can render guidance for every one of them, that
-the guidance never overclaims a specific subtype, that lookup prefers the
-specific demo pool, and that a missing CLASS_INDEX_MAP fails safe (unknown),
-never silently guessing an order.
+the guidance never overclaims a specific subtype, and that a missing
+CLASS_INDEX_MAP fails safe (unknown), never silently guessing an order.
 """
 
 import json
@@ -57,11 +56,12 @@ def test_broad_entries_do_not_claim_specific_subtypes():
             )
 
 
-def test_broad_ids_do_not_collide_with_demo_pool():
-    from app.services.inference.broad_classes import broad_class_ids
-    from app.services.inference.mock import MOCK_MATERIAL_POOL
-    pool_ids = {e["material_id"] for e in MOCK_MATERIAL_POOL}
-    assert pool_ids.isdisjoint(set(broad_class_ids()))
+def test_lookup_resolves_every_model_class_to_broad_guidance():
+    from app.services.inference.broad_classes import broad_class_ids, get_broad_entry
+    for class_id in broad_class_ids():
+        entry = get_broad_entry(class_id)
+        assert entry is not None, f"no guidance for model class '{class_id}'"
+        assert entry["material_id"] == class_id
 
 
 def test_get_broad_entry_lookup():
@@ -72,14 +72,31 @@ def test_get_broad_entry_lookup():
     assert get_broad_entry("") is None
 
 
-def test_lookup_prefers_specific_pool_then_broad():
+def test_classifier_lookup_uses_broad_guidance_only():
     from app.services.inference.onnx_classifier import ONNXClassifier
     clf = object.__new__(ONNXClassifier)
-    assert clf._lookup_entry("plastic_pet_bottle")["material_id"] == "plastic_pet_bottle"
+    assert clf._lookup_entry("plastic")["material_id"] == "plastic"
     assert clf._lookup_entry("textile")["material_id"] == "textile"
+    # A non-broad id (the old demo pool) no longer resolves to a specific
+    # material: it falls through to unknown rather than mislabelling.
+    assert clf._lookup_entry("plastic_pet_bottle") is None
     assert clf._lookup_entry("no_such_material") is None
     assert clf._lookup_entry(None) is None
     assert clf._lookup_entry("") is None
+
+
+def test_unknown_material_guidance_is_honest():
+    from app.services.inference.broad_classes import UNKNOWN_MATERIAL
+    assert UNKNOWN_MATERIAL["material_id"] == "unknown"
+    assert UNKNOWN_MATERIAL["disposal_bin"] == "rejected"
+    assert UNKNOWN_MATERIAL["recovery_potential"] == "none"
+    blob = " ".join([
+        UNKNOWN_MATERIAL["next_life"], UNKNOWN_MATERIAL["action"],
+        UNKNOWN_MATERIAL["contamination_notes"], *UNKNOWN_MATERIAL["do"],
+        *UNKNOWN_MATERIAL["do_not"],
+    ]).lower()
+    for banned in ("demo", "simulation", "mock", "practice mode"):
+        assert banned not in blob, f"unknown guidance still mentions '{banned}'"
 
 
 def test_class_map_fallback_fails_safe():

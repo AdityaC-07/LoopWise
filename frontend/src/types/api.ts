@@ -8,7 +8,6 @@ export interface ApiEnvelope<T> {
   meta: {
     request_id: string;
     model_version: string;
-    demo_mode: boolean;
   };
 }
 
@@ -146,7 +145,6 @@ export interface HealthData {
     image_store: string;
   };
   model_version?: string;
-  demo_mode: boolean;
   environment?: string;
   inference_error?: string;
 }

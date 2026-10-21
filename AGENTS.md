@@ -121,7 +121,7 @@ DATABASE_URL=postgresql+asyncpg://user:password@host:5432/loopwise
 - **Base URL**: `/api/v1/`
 - **Response envelope**: Standardized with `status`, `data`, `error`, `meta`
 - **Error handling**: Plain-language messages for all user-facing errors
-- **Demo mode**: Clearly labeled in all responses (`meta.demo_mode`)
+- **Inference**: ONNX is the only classification path; no demo/mock mode exists. A service failure returns an explicit error, never a fabricated result
 
 ### Image Upload Validation
 
@@ -177,7 +177,7 @@ Before marking a task complete:
 3. **Production build**: Run `npm run build` in frontend directory
 4. **Lint**: Run `npm run lint` in frontend directory
 5. **API audit**: Verify frontend API calls match backend schemas
-6. **Demo mode**: Verify all demo-mode indicators are visible in UI
+6. **Classifier health**: Verify `GET /api/v1/health` reports `inference_engine: "ok"` and the top-bar status indicator shows ready
 
 ## Common Issues
 
@@ -212,6 +212,6 @@ If frontend cannot connect to backend:
 
 - **Never commit**: `.env` files, database files (`*.db`), model weights, or secrets
 - **Always preserve**: React + TypeScript + Vite stack, FastAPI backend, Material Flows design
-- **Demo mode**: Must be clearly labeled in UI; never present mock predictions as real
+- **Real inference only**: Never reintroduce a demo/mock classifier or present a simulated prediction as real
 - **Privacy**: Images only stored with explicit consent; respect user consent flags
 - **Error handling**: Use plain language for all user-facing errors; no technical jargon

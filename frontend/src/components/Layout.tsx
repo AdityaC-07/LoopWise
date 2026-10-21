@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Recycle,
 } from 'lucide-react';
-import { PracticeModeIndicator } from './PracticeModeIndicator';
+import { ServiceStatusIndicator, type ClassifierStatus } from './ServiceStatusIndicator';
 
 const NAV_ITEMS = [
   { to: '/classify', label: 'Classify Waste', icon: Camera },
@@ -20,10 +20,10 @@ const NAV_ITEMS = [
 
 interface LayoutProps {
   children: React.ReactNode;
-  demoMode?: boolean;
+  classifierStatus: ClassifierStatus;
 }
 
-export function Layout({ children, demoMode }: LayoutProps) {
+export function Layout({ children, classifierStatus }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
 
@@ -56,7 +56,7 @@ export function Layout({ children, demoMode }: LayoutProps) {
           </span>
         </NavLink>
         <div style={{ flex: 1 }} />
-        <PracticeModeIndicator demoMode={demoMode} />
+        <ServiceStatusIndicator status={classifierStatus} />
       </header>
 
       {/* Desktop sidebar */}

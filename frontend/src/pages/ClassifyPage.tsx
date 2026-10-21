@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Upload, X, HelpCircle } from 'lucide-react';
-import { classifyItem, getHealth } from '../api/client';
+import { classifyItem } from '../api/client';
 import { getSessionId } from '../utils/session';
 import { fileToBase64 } from '../utils/display';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { PracticeModeTooltip } from '../components/PracticeModeIndicator';
 import type { ApiError } from '../api/client';
 
 const WARD_OPTIONS = [
@@ -31,15 +30,10 @@ export default function ClassifyPage() {
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [showConsentTooltip, setShowConsentTooltip] = useState(false);
-  const [demoMode, setDemoMode] = useState<boolean | undefined>(undefined);
 
-  useEffect(() => {
-    getHealth()
-      .then((response) => setDemoMode(response.meta.demo_mode))
-      .catch(() => setDemoMode(undefined));
-  }, []);
-
-  const hasInput = !!(imageFile || description.trim());
+  // A photo is required: classification runs on the image alone. The
+  // description is optional context the user may add.
+  const hasInput = !!imageFile;
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith('image/')) {
@@ -103,7 +97,6 @@ export default function ClassifyPage() {
 
       // Store result in sessionStorage for the result page
       sessionStorage.setItem('loopwise_result', JSON.stringify(result.data));
-      sessionStorage.setItem('loopwise_demo_mode', String(result.meta.demo_mode));
       navigate(`/result/${result.data.event_id}`);
     } catch (err) {
       const apiErr = err as ApiError;
@@ -127,10 +120,9 @@ export default function ClassifyPage() {
         Identify Waste
       </h1>
       <p style={{ fontSize: 15, color: 'var(--color-text-secondary)', margin: '0 0 24px' }}>
-        Take a photo or describe the item to find out which bin it belongs in.
+        Take a photo to find out which bin it belongs in. A description is optional, and
+        helps when the photo is unclear.
       </p>
-
-      <PracticeModeTooltip demoMode={demoMode} />
 
       {error && (
         <div style={{ marginBottom: 16 }}>
@@ -263,7 +255,7 @@ export default function ClassifyPage() {
         }}
       >
         <div style={{ flex: 1, borderTop: '1px solid var(--color-border)' }} />
-        or describe it in words
+        add a description (optional)
         <div style={{ flex: 1, borderTop: '1px solid var(--color-border)' }} />
       </div>
 
@@ -279,7 +271,7 @@ export default function ClassifyPage() {
             marginBottom: 6,
           }}
         >
-          Describe the item
+          Describe the item (optional)
         </label>
         <textarea
           id="classify-description"
@@ -400,15 +392,29 @@ export default function ClassifyPage() {
           </span>
         </div>
       ) : (
-        <button
-          className="btn btn-primary"
-          style={{ width: '100%' }}
-          disabled={!hasInput}
-          onClick={handleSubmit}
-          aria-disabled={!hasInput}
-        >
-          Identify this item →
-        </button>
+        <>
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%' }}
+            disabled={!hasInput}
+            onClick={handleSubmit}
+            aria-disabled={!hasInput}
+          >
+            Identify this item →
+          </button>
+          {!imageFile && (
+            <p
+              style={{
+                fontSize: 13,
+                color: 'var(--color-text-tertiary)',
+                textAlign: 'center',
+                margin: '10px 0 0',
+              }}
+            >
+              Add a photo above to classify the item.
+            </p>
+          )}
+        </>
       )}
     </div>
   );

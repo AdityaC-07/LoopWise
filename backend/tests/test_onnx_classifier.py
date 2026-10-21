@@ -174,10 +174,10 @@ def test_top3_matches_reference_ranking():
 
 def test_low_confidence_uses_safe_unknown():
     clf = _bare_classifier()
-    res = clf._unknown_genuine_result(0.20, [0, 1, 2], [0.20, 0.18, 0.16])
+    res = clf._unknown_result(0.20, [0, 1, 2], [0.20, 0.18, 0.16])
     assert res.predicted_class == "unknown"
     assert res.confidence_label == "low"
-    assert res.is_demo is False  # genuine model, honestly uncertain
+    assert not hasattr(res, "is_demo")
     assert len(res.top3) == 3
     assert res.top3[0]["class"] == "unknown"
 
@@ -204,10 +204,13 @@ def test_factory_rejects_missing_model_without_mock_fallback(monkeypatch):
     from app.services.inference import factory
     from app.core.errors import InferenceConfigurationError
 
-    monkeypatch.setattr(factory.settings, "DEMO_MODE", False, raising=False)
     monkeypatch.setattr(factory.settings, "MODEL_PATH", None, raising=False)
-    with pytest.raises(InferenceConfigurationError):
-        factory.get_classifier()
+    factory.reset_classifier_cache()
+    try:
+        with pytest.raises(InferenceConfigurationError):
+            factory.get_classifier()
+    finally:
+        factory.reset_classifier_cache()
 
 
 def test_unknown_semantics_falls_back_to_default():
@@ -295,9 +298,9 @@ async def test_real_onnx_artifact_integration():
     for p in images:
         results.append(await clf.classify(image_bytes=p.read_bytes()))
 
-    # Every result is genuine (never demo) and numerically sane.
+    # Every result is genuine and numerically sane.
     for res in results:
-        assert res.is_demo is False
+        assert not hasattr(res, "is_demo")
         assert math.isfinite(res.confidence)
         assert 0.0 <= res.confidence <= 1.0
         assert len(res.top3) == 3

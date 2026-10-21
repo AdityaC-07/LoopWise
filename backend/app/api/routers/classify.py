@@ -19,7 +19,7 @@ settings = get_settings()
 
 router = APIRouter(tags=["Classification"])
 
-VALID_DEMO_WARDS = {"WD-DEMO-A", "WD-DEMO-B", "WD-DEMO-C", "WD-001", "WD-002", "WD-003"}
+VALID_WARDS = {"WD-DEMO-A", "WD-DEMO-B", "WD-DEMO-C", "WD-001", "WD-002", "WD-003"}
 
 
 @router.post("/classify")
@@ -27,9 +27,9 @@ async def classify_item(
     payload: ClassifyRequest,
     db: Optional[AsyncSession] = Depends(get_db)
 ):
-    """Classifies waste item from image or description and provides disposal guidance."""
+    """Classifies a waste item from an uploaded photo and provides disposal guidance."""
     # Ward ID validation if provided
-    if payload.ward_id and payload.ward_id not in VALID_DEMO_WARDS:
+    if payload.ward_id and payload.ward_id not in VALID_WARDS:
         raise WardUnknownError(f"We don't recognise ward '{payload.ward_id}'. Please choose a valid ward.")
 
     # Decode image bytes in memory
@@ -55,7 +55,7 @@ async def classify_item(
         consent_image_upload=payload.consent.image_upload
     )
 
-    # Try saving classification event to DB (fail gracefully if DB unavailable in demo mode)
+    # Try saving classification event to DB (fail gracefully if DB unavailable)
     db_connected = await check_db_connection()
     if db_connected and db is not None:
         try:
@@ -78,7 +78,6 @@ async def classify_item(
                 image_stored=image_stored,
                 image_key=image_key,
                 consent_flags=payload.consent.model_dump(),
-                demo_mode=result.is_demo
             )
             db.add(event)
             await db.commit()
@@ -111,6 +110,5 @@ async def classify_item(
 
     return success_response(
         data=response_data,
-        model_version=result.model_version,
-        demo_mode=result.is_demo
+        model_version=result.model_version
     )

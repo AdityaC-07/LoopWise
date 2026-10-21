@@ -121,7 +121,7 @@ async def get_ward_analytics(
     response_data = {
         "ward_id": ward_id,
         "period": {"from": d_from.strftime("%Y-%m-%d"), "to": d_to.strftime("%Y-%m-%d")},
-        "demo_data": settings.DEMO_MODE or (not db_connected),
+        "demo_data": (not db_connected),
         "summary": {
             "total_events": tot_events,
             "correction_rate": avg_corr,
@@ -154,7 +154,9 @@ async def get_analytics_overview():
     
     response_data = {
         "period": {"from": (datetime.date.today() - datetime.timedelta(days=30)).strftime("%Y-%m-%d"), "to": datetime.date.today().strftime("%Y-%m-%d")},
-        "demo_data": settings.DEMO_MODE,
+        # The overview is always built from the seeded rollup generator, so it
+        # is always labelled as such regardless of classifier configuration.
+        "demo_data": True,
         "summary": {
             "total_events": tot_events,
             "correction_rate": 0.12,

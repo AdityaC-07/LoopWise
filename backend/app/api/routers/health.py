@@ -15,7 +15,12 @@ router = APIRouter(tags=["Health"])
 
 @router.get("/health")
 async def health_check():
-    """Health check endpoint evaluating DB, Redis, inference engine, and image store."""
+    """Health check endpoint evaluating DB, Redis, inference engine, and image store.
+
+    ``inference_engine`` reflects whether the ONNX classifier actually loaded —
+    it is never a hardcoded value. If the model failed to load, the endpoint
+    reports "unavailable" and the overall status is "degraded".
+    """
     db_ok = await check_db_connection()
     db_status = "ok" if db_ok else "unreachable"
 
@@ -23,7 +28,7 @@ async def health_check():
     inference_error = None
     try:
         classifier = get_classifier()
-        inference_status = "mock" if classifier.is_demo else "ok"
+        inference_status = "ok"
     except InferenceConfigurationError as exc:
         inference_status = "unavailable"
         inference_error = exc.message
@@ -40,23 +45,22 @@ async def health_check():
     storage_service = get_storage_service()
     storage_status = "ok" if storage_service.is_configured else "unconfigured"
 
+    model_version = classifier.model_version if classifier else settings.MODEL_VERSION
     health_data = {
-        "status": "ok" if db_ok else "degraded",
+        "status": "ok" if inference_status == "ok" else "degraded",
         "components": {
             "database": db_status,
             "inference_engine": inference_status,
             "cache": cache_status,
             "image_store": storage_status
         },
-        "model_version": classifier.model_version if classifier else settings.MODEL_VERSION,
-        "demo_mode": settings.DEMO_MODE
+        "model_version": model_version
     }
     if inference_error:
         health_data["inference_error"] = inference_error
 
     return build_response_envelope(
-        status="ok" if inference_status != "unavailable" else "degraded",
+        status="ok" if inference_status == "ok" else "degraded",
         data=health_data,
-        model_version=classifier.model_version if classifier else settings.MODEL_VERSION,
-        demo_mode=settings.DEMO_MODE
+        model_version=model_version
     )

@@ -7,15 +7,15 @@ municipal decision-makers.
 
 LoopWise runs an **8-class image classifier** (YOLO26n-cls, exported to ONNX)
 behind a **FastAPI** backend, with a **React + TypeScript + Vite** frontend.
-Inference has two first-class modes: an honest, clearly-labelled **demo (mock)**
-mode, and a genuine **ONNX production** mode.
+ONNX image inference is the **only** classification path — there is no demo or
+mock mode, and a result is never fabricated when the model is unavailable.
 
 > **Status:** the classifier is trained, exported, and wired into the backend.
 > The deployed ONNX output contract and preprocessing were corrected and
 > verified (see [ML Pipeline](#ml-pipeline) → [Evaluation](#evaluation--verified-metrics)
-> and [ONNX output contract](#onnx-output-contract)). The backend still defaults
-> to **demo mode** until `MODEL_PATH`/`CLASS_INDEX_MAP` are set and
-> `DEMO_MODE=false` (`yolo26n-cls-v1`).
+> and [ONNX output contract](#onnx-output-contract)). The backend loads
+> `yolo26n-cls-v1` from `MODEL_PATH`/`CLASS_INDEX_MAP`, which default to the
+> approved artefacts in `ml/models/`.
 
 ---
 
@@ -77,16 +77,16 @@ alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000   # http://localhost:8000
 ```
 
-### Run genuine ONNX inference on Windows
+### Run the ONNX classifier on Windows
 
-The default configuration is explicitly labelled demo mode. To run the
-checked-in classifier with real image bytes, use a PowerShell session and set
-all production inference settings before starting the backend:
+`MODEL_PATH` and `CLASS_INDEX_MAP` default to the approved artefacts in
+`ml/models/`, so a local checkout needs no environment variables at all. To
+point at a specific model (or run from another working directory), set them
+before starting the backend:
 
 ```powershell
 cd "C:\Users\Agniv Dutta\LoopWise\backend"
 .venv\Scripts\Activate.ps1
-$env:DEMO_MODE="false"
 $env:MODEL_PATH="C:\Users\Agniv Dutta\LoopWise\ml\models\loopwise-yolo26n-cls.onnx"
 $env:CLASS_INDEX_MAP="C:\Users\Agniv Dutta\LoopWise\ml\models\loopwise-yolo26n-cls.class-index-map.json"
 $env:MODEL_VERSION="yolo26n-cls-v1"
@@ -95,10 +95,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Verify `GET http://127.0.0.1:8000/api/v1/health` reports
-`components.inference_engine` as `ok` and `demo_mode` as `false`. If the
-model or class map cannot be loaded, health reports `degraded` and the API
-does not silently switch to mock inference. Image bytes are processed in
-memory unless `consent.image_upload` is enabled.
+`components.inference_engine` as `ok`. If the model or class map cannot be
+loaded, the API starts anyway, health reports `degraded` with
+`inference_engine: "unavailable"`, and `POST /api/v1/classify` returns an
+explicit `503 INFERENCE_NOT_CONFIGURED` — it never silently substitutes a
+simulated answer. Image bytes are processed in memory unless
+`consent.image_upload` is enabled.
 
 ### Tests
 
@@ -112,12 +114,12 @@ pytest --cov=app --cov-report=html
 
 - **Base URL:** `/api/v1/`
 - **Response envelope:** `{ "status", "data", "error", "meta" }`; `meta` carries
-  `request_id`, `model_version`, and `demo_mode`.
+  `request_id` and `model_version`.
 - **Errors** use plain language for user-facing messages.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/v1/classify` | Classify waste (image and/or description), return guidance + top-3 |
+| `POST /api/v1/classify` | Classify a photo (description optional), return guidance + top-3 |
 | `POST /api/v1/feedback` | Submit a correction / confirmation for an event |
 | `GET  /api/v1/analytics/ward/{ward_id}` | Ward-level analytics for a period |
 | `GET  /api/v1/analytics/*` | Society / operator / municipal rollups |
@@ -326,7 +328,6 @@ MODEL_PATH=<abs path>/loopwise-yolo26n-cls.onnx
 CLASS_INDEX_MAP=<abs path>/loopwise-yolo26n-cls.class-index-map.json
 MODEL_VERSION=yolo26n-cls-v1
 MODEL_OUTPUT=probabilities
-DEMO_MODE=false
 ```
 
 ### Honest limitations
@@ -357,14 +358,13 @@ DEMO_MODE=false
 Copy `.env.example` to `.env` and fill in values. Key variables:
 
 ```bash
-DEMO_MODE=true                 # true → mock mode; false + MODEL_PATH → production
 ENVIRONMENT=development
 
 DATABASE_URL=sqlite+aiosqlite:///./loopwise.db   # prod: postgresql+asyncpg://...
 REDIS_URL=redis://localhost:6379/0
 
-MODEL_PATH=                    # leave blank to force demo mode
-CLASS_INDEX_MAP=
+MODEL_PATH=../ml/models/loopwise-yolo26n-cls.onnx   # defaults to the approved V1 artefact
+CLASS_INDEX_MAP=../ml/models/loopwise-yolo26n-cls.class-index-map.json
 MODEL_VERSION=yolo26n-cls-v1
 MODEL_OUTPUT=probabilities     # or "logits" for a raw-logits model
 S3_BUCKET=
@@ -383,19 +383,19 @@ secrets — see `.gitignore`.
 
 ---
 
-## Demo mode
+## When the classifier is unavailable
 
-Demo mode is a **first-class operational state**, not a stopgap. It activates
-with `DEMO_MODE=true` or when no model file is found at `MODEL_PATH`.
+There is **no demo or mock classification path**. If the ONNX model, the
+class-index map or `onnxruntime` cannot be loaded:
 
-- Returns plausible mock classifications for a pool of representative items,
-  tagged `demo_mode: true` in `meta`.
-- Deterministic: the same input hash → the same result.
-- Confidence distribution is realistic (~60% high, ~25% medium, ~15% low); top-3
-  alternatives use realistic confusion pairs.
-- Must **never** claim real model performance, present mock confidences as
-  accuracy, or leak demo events into production analytics (filtered by
-  `demo_mode`).
+- The API still starts, and logs a clear startup error naming the cause.
+- `GET /api/v1/health` reports `status: "degraded"` with
+  `components.inference_engine: "unavailable"` (never a hardcoded "ok").
+- `POST /api/v1/classify` returns `503 INFERENCE_NOT_CONFIGURED` with a
+  plain-language message. **No result is ever fabricated.**
+- A genuine low-confidence model answer is different from an outage: it is a
+  normal `200` whose `predicted_class` is `"unknown"`, with manual-review
+  guidance and the runner-up materials the user can pick from.
 
 ---
 

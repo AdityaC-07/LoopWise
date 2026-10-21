@@ -24,7 +24,6 @@ export default function ResultPage() {
   const navigate = useNavigate();
 
   const [result, setResult] = useState<ClassifyResult | null>(null);
-  const [demoMode, setDemoMode] = useState(true);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('idle');
   const [selectedCorrection, setSelectedCorrection] = useState('');
@@ -33,10 +32,8 @@ export default function ResultPage() {
 
   useEffect(() => {
     const stored = sessionStorage.getItem('loopwise_result');
-    const storedDemo = sessionStorage.getItem('loopwise_demo_mode');
     if (stored) {
       setResult(JSON.parse(stored) as ClassifyResult);
-      setDemoMode(storedDemo === 'true');
     }
   }, [eventId]);
 
@@ -103,6 +100,9 @@ export default function ResultPage() {
     result.predicted_class === 'unknown'
       ? []
       : otherMatches(result.top3, result.predicted_class);
+  // Real materials only: the synthetic "unknown" entry is a placeholder, not
+  // an answer the user can choose as their manual correction.
+  const pickerOptions = result.top3.filter((item) => item.class !== 'unknown');
 
   return (
     <div className="content-area" style={{ maxWidth: 560 }}>
@@ -128,26 +128,9 @@ export default function ResultPage() {
           {result.material.name || friendlyClassName(result.predicted_class)}
         </h1>
         <MaterialBadge category={result.material.category} />
-        {demoMode && (
-          <span
-            style={{
-              marginLeft: 8,
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '3px 8px',
-              borderRadius: 'var(--radius-pill)',
-              background: 'var(--color-amber-dim)',
-              color: 'var(--color-amber)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-            }}
-          >
-            Practice result
-          </span>
-        )}
       </div>
 
-      {/* Uncertain result — explain whether this came from demo or real inference. */}
+      {/* Genuine low-confidence answer: ask the user to verify it manually. */}
       {result.predicted_class === 'unknown' && (
         <div
           style={{
@@ -160,14 +143,12 @@ export default function ResultPage() {
           role="alert"
         >
           <div style={{ fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 4 }}>
-            {demoMode ? 'Demo simulation — photo not recognised.' : 'Photo not recognised with enough confidence.'}
+            Photo not recognised with enough confidence.
           </div>
           <div style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-            {demoMode
-              ? 'The demo cannot analyse photos, so this is not a verified image recognition result.'
-              : 'The model did not produce a confident material classification from this photo.'}{' '}
-            Please describe the item in words or pick the closest material below, and check your
-            local waste rules when unsure.
+            The model did not produce a confident material classification from this photo. Please
+            describe the item in words or pick the closest material below, and check your local
+            waste rules when unsure.
           </div>
         </div>
       )}
@@ -203,7 +184,7 @@ export default function ResultPage() {
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {result.top3.map((item) => {
+            {pickerOptions.map((item) => {
               const mat = materials.find((m) => m.name.toLowerCase().includes(item.class.toLowerCase().replace(/_/g, ' ').split(' ')[0]));
               const color = mat ? binColor(mat.disposal_bin) : 'var(--color-text-tertiary)';
               return (

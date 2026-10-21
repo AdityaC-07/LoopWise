@@ -16,7 +16,7 @@ async def compute_ward_rollup(db: AsyncSession, ward_id: str, date: datetime.dat
     start_dt = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.timezone.utc)
     end_dt = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.timezone.utc)
 
-    # Filter out demo_mode = true events for production aggregation
+    # Exclude legacy demo-mode events (always False for anything written now)
     stmt = select(ClassificationEvent).where(
         ClassificationEvent.ward_id == ward_id,
         ClassificationEvent.created_at >= start_dt,

@@ -356,7 +356,7 @@ SEED_MATERIALS = [
 async def seed_materials_database():
     """Seeds 25 representative Indian waste stream materials into DB."""
     if not await check_db_connection():
-        logger.warning("Database not connected. Skipping DB seed insertion (demo fallback active).")
+        logger.warning("Database not connected. Skipping DB seed insertion; serving the in-memory material catalog instead.")
         return
 
     async with AsyncSessionLocal() as session:

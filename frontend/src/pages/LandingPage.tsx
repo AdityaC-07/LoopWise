@@ -464,7 +464,8 @@ export default function LandingPage() {
                 marginTop: 'var(--space-3)',
               }}
             >
-              Shown in Practice Mode — a training version of the app using test data.
+              Example result shown for illustration. Your classification comes from the live
+              vision model.
             </p>
           </div>
         </div>
@@ -786,28 +787,6 @@ export default function LandingPage() {
             </nav>
           </div>
 
-          <div
-            style={{
-              borderTop: '1px solid var(--color-border)',
-              paddingTop: 'var(--space-5)',
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 'var(--space-4)',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', margin: 0, lineHeight: 1.6 }}>
-              LoopWise is running in Practice Mode. Classifications and ward figures in the app
-              are demonstration data, not live measurements.
-            </p>
-            <span
-              className="badge"
-              style={{ background: 'var(--color-amber-dim)', color: 'var(--color-amber)' }}
-            >
-              Practice Mode
-            </span>
-          </div>
         </div>
       </footer>
     </div>

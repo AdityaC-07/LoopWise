@@ -75,7 +75,7 @@ C4Context
     Rel(municipal, platform, "Views analytics dashboard")
     Rel(operator, platform, "Views recovery analytics")
     Rel(society_mgr, platform, "Views society analytics")
-    Rel(platform, onnx, "Runs inference — or mock mode if unavailable")
+    Rel(platform, onnx, "Runs ONNX inference (only classification path)")
     Rel(platform, rds, "Reads/writes events, corrections, analytics rollups")
     Rel(platform, redis, "Caches analytics; stores Celery tasks")
     Rel(platform, s3, "Stores images — explicit consent required per event")
@@ -111,12 +111,10 @@ graph TD
     end
 
     subgraph ML["ML Pipeline"]
-        MOCK["MockClassifier\n(demo mode)"]
-        ONNX_RT["ONNXClassifier\n(production mode)"]
+        ONNX_RT["ONNXClassifier\n(only classification path)"]
         PRE["Image Preprocessor\nPIL — resize / normalise"]
         INF --> PRE
         PRE --> ONNX_RT
-        INF --> MOCK
     end
 
     subgraph STORE["Storage"]
@@ -158,7 +156,7 @@ classification_events
 ├── created_at           TIMESTAMPTZ     NOT NULL
 ├── ward_id              VARCHAR(32)     nullable    -- coarse identifier only; never raw GPS
 ├── input_type           ENUM            (image, text) NOT NULL
-├── model_version        VARCHAR(32)     NOT NULL    -- 'mock-v1', 'yolo26-v1', etc.
+├── model_version        VARCHAR(32)     NOT NULL    -- e.g. 'yolo26n-cls-v1'
 ├── predicted_class      VARCHAR(64)     NOT NULL    -- material_id from materials table
 ├── confidence           FLOAT           NOT NULL    -- 0.0 – 1.0
 ├── top3_predictions     JSONB           -- [{class, confidence}, {}, {}]
@@ -172,10 +170,14 @@ classification_events
 ├── image_stored         BOOLEAN         DEFAULT FALSE
 ├── image_key            TEXT            nullable    -- S3 key; null unless image_stored = true
 ├── consent_flags        JSONB           -- {image_upload: bool, analytics: bool, location: bool}
-└── demo_mode            BOOLEAN         DEFAULT FALSE
+└── demo_mode            BOOLEAN         DEFAULT FALSE    -- legacy; always FALSE for new rows
 ```
 
 **Indexes:** `(ward_id, created_at)` · `(session_id, created_at)` · `(predicted_class, created_at)` · `(is_corrected, created_at)` · `(demo_mode, created_at)`
+
+> `demo_mode` is retained for schema stability only. Demo/mock classification
+> was removed; the column is always `False` for events written now, and the
+> aggregator still excludes any legacy rows that predate the removal.
 
 ---
 
@@ -276,8 +278,7 @@ users
   "error": { "code": "ERROR_CODE", "message": "Human-readable detail" },
   "meta": {
     "request_id": "uuid",
-    "model_version": "mock-v1 | yolo26-v1",
-    "demo_mode": true
+    "model_version": "yolo26n-cls-v1"
   }
 }
 ```
@@ -342,7 +343,7 @@ users
       "do_not": ["Do not include if contaminated with food", "Do not mix with wet waste"]
     }
   },
-  "meta": { "model_version": "mock-v1", "demo_mode": true }
+  "meta": { "model_version": "yolo26n-cls-v1" }
 }
 ```
 
@@ -466,35 +467,40 @@ Returns full materials taxonomy as a flat list. Used by the frontend for correct
   "status": "ok",
   "components": {
     "database":        "ok | degraded | unavailable",
-    "inference_engine":"ok | mock | unavailable",
+    "inference_engine":"ok | unavailable",
     "cache":           "ok | degraded | unavailable",
     "image_store":     "ok | unconfigured"
   },
-  "model_version": "mock-v1",
-  "demo_mode": true
+  "model_version": "yolo26n-cls-v1",
+  "inference_error": null
 }
 ```
+
+When the ONNX model failed to load, `components.inference_engine` is
+`"unavailable"`, top-level `status` is `"degraded"`, `inference_error` carries
+the plain-language cause, and `POST /api/v1/classify` returns
+`503 INFERENCE_NOT_CONFIGURED`.
 
 ---
 
 ## 7. ML Inference Architecture
 
-### 7.1 Operational modes
+### 7.1 Operational mode
 
-The inference service must maintain an identical API contract in both modes. Mode is determined at startup.
+There is a single operational mode. ONNX inference is the only classification
+path — no demo or mock simulator exists, and no fallback can answer a request
+when the model is unavailable.
 
-**Demo mode** (no weights required — activated by `DEMO_MODE=true` or missing model file)
-- Returns plausible, clearly-marked mock classifications
-- Uses MD5 hash of input bytes or description text to deterministically select a result (same input → same output)
-- All responses tagged `demo_mode: true` in the `meta` envelope
-- Confidence distribution is realistic: ~60% high, ~25% medium, ~15% low
-- Top-3 alternatives use predefined confusion pairs, not random selection
-
-**Production mode** (`DEMO_MODE=false` and model file found at `MODEL_PATH`)
-- Loads YOLO26 weights in ONNX format at startup; fails health check if file is corrupt or incompatible
-- Preprocessing: decode → validate format → resize to model input dimensions → normalise pixel values
-- ONNX inference with a 5-second hard timeout; falls back with `INFERENCE_FAILED` if exceeded
-- Maps class index to `material_id` using a class-index mapping file (must be verified against actual model)
+- Loads YOLO26 weights in ONNX format (default `yolo26n-cls-v1`); if the file
+  is missing, corrupt or incompatible the API still starts, `/health` reports
+  `inference_engine: "unavailable"` and `status: "degraded"`, and
+  `POST /classify` returns an explicit `503 INFERENCE_NOT_CONFIGURED`
+- Preprocessing: decode → validate format → resize to model input dimensions →
+  divide by 255 (no ImageNet mean/std — matches the reference transform)
+- ONNX inference with a 5-second hard timeout; exceeded → `INFERENCE_FAILED`
+- Maps class index to `material_id` using a class-index mapping file (must be
+  verified against actual model)
+- Output is consumed as a probability distribution — never re-softmaxed
 
 ### 7.2 Preprocessing pipeline
 
@@ -545,35 +551,44 @@ Input bytes
 
 ---
 
-## 9. Demo Mode Strategy
+## 9. Inference Availability Strategy
 
-Demo mode is a first-class operational state, not a stopgap.
+There is no demo mode. ONNX inference is the only classification path, so the
+question at startup is only ever "did the model load?".
 
-### Activation
-- `DEMO_MODE=true` in environment, **or**
-- ONNX weights not found at the path specified by `MODEL_PATH` at startup
+### Loading
+- `MODEL_PATH` / `CLASS_INDEX_MAP` default to the approved artefacts in
+  `ml/models/`; deployments override them via environment variables
+- The classifier is loaded once at startup and cached, so readiness has a
+  stable answer rather than being re-probed per request
 
-The health endpoint always reports current demo mode status.
+### When the model cannot be loaded
+- The API still starts (a crash loop would hide the cause) and logs a clear
+  startup error
+- `GET /health` reports `status: "degraded"` and
+  `components.inference_engine: "unavailable"` — never a hardcoded "ok"
+- `POST /classify` returns `503 INFERENCE_NOT_CONFIGURED` with a plain-language
+  message. **No result is ever fabricated, and no simulator can answer.**
+- The frontend shows "Image classification is temporarily unavailable. Please
+  check the server and try again." — never an "unknown item" prediction
 
-### Mock classifier behaviour
-- Pool of ~20 representative waste items covering all material categories
-- Deterministic: same input hash → same classification result
-- Confidence distribution simulates realistic model behaviour (not all high)
-- Top-3 alternatives use predefined realistic confusion pairs (e.g. tetrapack ↔ PET bottle)
-- Low-confidence results (~15% of mock responses) trigger the correction flow — intentional for demo quality
+### Distinction: unknown answer vs. outage
+- A **genuine low-confidence answer** is a normal `200` whose
+  `predicted_class` is `"unknown"`, with `confidence_label: "low"` and
+  manual-review guidance plus the runner-up materials to pick from
+- A **service error** is a non-200 with `error.code` `INFERENCE_FAILED` (500)
+  or `INFERENCE_NOT_CONFIGURED` (503) and `data: null`
+- These two are never conflated: an outage cannot surface as "unknown", and a
+  low-confidence answer is not reported as an outage
 
-### Demo analytics seed data
+### Seeded analytics data (separate concern)
 - 30 days of synthetic ward analytics for 3 named demo wards
 - Narrative structure:
   - **Ward A:** Improving contamination trend — model learning effect
   - **Ward B:** Mid-period contamination spike — realistic operational event
   - **Ward C:** Consistently high recovery potential — good-segregation reference
-- All seeded rows have `demo_mode = true` for filtering
-
-### What demo mode must not do
-- Claim real model performance
-- Present mock confidence scores as measured accuracy
-- Include demo events in production analytics rollups (filter by `demo_mode = false`)
+- Responses carry `demo_data: true` when the rollups came from the seed
+  generator rather than the database, so analytics provenance stays honest
 
 ---
 
@@ -637,7 +652,10 @@ The local development setup uses Docker Compose to run the full application stac
 
 **Local Development Prerequisites:**
 - Local tools required: Docker Desktop (with Docker Compose v2+), Python 3.12+, Node.js 22+.
-- **Zero Cloud Credentials Required:** Local development operates entirely in Mock Inference mode (`DEMO_MODE=true`) without needing AWS credentials, active internet connections, or real ONNX model weights.
+- **Zero Cloud Credentials Required:** Local development runs the real ONNX
+  classifier against the checked-in artefacts in `ml/models/` — no AWS
+  credentials and no internet connection are needed. Only image uploads stored
+  with explicit consent require S3 in production.
 - **Scope Isolation:** Local containers are strictly for local development and testing; they do NOT represent or replace the AWS cloud deployment topology.
 
 ---
@@ -716,7 +734,7 @@ Resource creation follows a strict dependency order. Infrastructure must be prov
 
 | Layer | Approach |
 |---|---|
-| Backend unit | pytest; inference service in mock mode, validation, data model constraints |
+| Backend unit | pytest; ONNX inference path with a real session, validation, data model constraints |
 | Backend integration | pytest + AsyncClient + isolated test database; classify → feedback → analytics chain |
 | Frontend unit | Vitest + Testing Library; component states, confidence display, correction flow |
 | Frontend E2E | Playwright; resident classification flow, analytics navigation at key breakpoints |
@@ -728,7 +746,7 @@ Resource creation follows a strict dependency order. Infrastructure must be prov
 
 ## 13. Observability
 
-- Structured JSON logs on every request: `request_id`, `session_id` (hashed), `model_version`, `latency_ms`, `demo_mode`, `error_code`
+- Structured JSON logs on every request: `request_id`, `session_id` (hashed), `model_version`, `latency_ms`, `error_code`
 - Key metrics: inference latency p50/p95/p99, correction rate trend, error rate by code, Celery task queue depth
 - Health endpoint for uptime monitoring
 - CloudWatch Log Groups: `/ecs/loopwise-api` and `/ecs/loopwise-worker` in `ap-south-1`
@@ -778,7 +796,7 @@ Resource creation follows a strict dependency order. Infrastructure must be prov
 |---|---|
 | FastAPI over Django/Flask | Native async support; auto-generated OpenAPI docs; natural fit for ML service integration |
 | ONNX Runtime over live PyTorch | Smaller deployment footprint; faster cold start; portable across runtimes |
-| Demo mode as first-class state | Frontend and product work cannot wait for trained weights; demo must be production-quality |
+| ONNX-only inference path | A simulated classifier must never be answerable; a real low-confidence answer is honest, a fabricated one is not |
 | Ward-level geography only | Privacy by design; GPS is unnecessary and creates data risk; ward granularity is sufficient for analytics |
 | Pre-aggregated rollups | Analytics read paths must be cheap and predictable; recomputing on demand is not acceptable at scale |
 | Consent per classification event | A user may consent to image upload for one session and not another; global flags are insufficient |
@@ -792,7 +810,6 @@ Resource creation follows a strict dependency order. Infrastructure must be prov
 
 ```bash
 # Runtime mode
-DEMO_MODE=true
 ENVIRONMENT=development
 
 # Database Configuration
@@ -806,8 +823,8 @@ REDIS_URL=redis://localhost:6379/0
 # AWS Deployed Note: Passed via AWS Secrets Manager to ECS tasks.
 
 # ML Model Configuration
-MODEL_PATH=          # optional; leave blank to force demo mode
-CLASS_INDEX_MAP=     # path to JSON mapping model output index → material_id
+MODEL_PATH=          # optional; defaults to ml/models/loopwise-yolo26n-cls.onnx
+CLASS_INDEX_MAP=     # optional; defaults to ml/models/loopwise-yolo26n-cls.class-index-map.json
 
 # Storage & AWS CLI Operator Settings
 # Note: Operators use --profile personal for CLI commands. Deployed ECS tasks use IAM Task Roles.

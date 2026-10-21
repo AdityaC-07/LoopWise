@@ -203,8 +203,6 @@ REDIS_URL=redis://loopwise-redis.xxxx.cache.amazonaws.com:6379/0
 ### 6.1 Backend Environment Variables
 
 ```bash
-# Application Mode
-DEMO_MODE=false
 ENVIRONMENT=production
 
 # Data Stores
@@ -396,7 +394,7 @@ CMD ["alembic", "upgrade", "head"]
 - [ ] Verify API endpoints accessible
 - [ ] Verify image upload works (with consent)
 - [ ] Verify analytics data persists
-- [ ] Verify demo mode disabled in production
+- [ ] Verify `GET /api/v1/health` reports `components.inference_engine: "ok"` (the real ONNX model loaded)
 - [ ] Monitor CloudWatch metrics for 24 hours
 - [ ] Review logs for errors
 

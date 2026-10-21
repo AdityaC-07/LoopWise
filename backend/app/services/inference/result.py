@@ -30,5 +30,4 @@ class ClassificationResult:
     top3: List[Dict[str, Any]]  # [{"class": str, "confidence": float}]
     material: MaterialGuidance
     guidance: DisposalGuidance
-    model_version: str = "mock-v1"
-    is_demo: bool = True
+    model_version: str = ""

@@ -12,17 +12,16 @@ class BaseClassifier(ABC):
         """Returns the version string of the model."""
         pass
 
-    @property
-    @abstractmethod
-    def is_demo(self) -> bool:
-        """Returns True if the classifier runs in demo/mock mode."""
-        pass
-
     @abstractmethod
     async def classify(
         self,
         image_bytes: Optional[bytes] = None,
         description: Optional[str] = None
     ) -> ClassificationResult:
-        """Classifies a waste item based on image bytes or text description."""
+        """Classifies a waste item from uploaded image bytes.
+
+        The description is optional extra context; image bytes carry the
+        classification. Implementations must never fabricate a result when the
+        model is unavailable — they raise instead.
+        """
         pass

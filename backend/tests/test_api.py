@@ -1,7 +1,14 @@
+import base64
 import uuid
 import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
+
+
+BROAD_CLASSES = {
+    "battery_hazardous", "glass", "metal", "organic",
+    "other_residue", "paper_cardboard", "plastic", "textile",
+}
 
 
 @pytest.mark.asyncio
@@ -11,12 +18,15 @@ async def test_health_endpoint():
         assert res.status_code == 200
         json_data = res.json()
         assert json_data["status"] == "ok"
-        assert json_data["data"]["demo_mode"] is True
-        assert json_data["data"]["components"]["inference_engine"] == "mock"
+        assert json_data["data"]["components"]["inference_engine"] == "ok"
+        assert json_data["data"]["model_version"] == "yolo26n-cls-v1"
+        assert "demo_mode" not in json_data["data"]
+        assert "demo_mode" not in json_data["meta"]
 
 
 @pytest.mark.asyncio
-async def test_classify_text_description():
+async def test_classify_text_description_is_rejected():
+    """Text alone cannot be classified any more — the model needs a photo."""
     session_id = str(uuid.uuid4())
     payload = {
         "session_id": session_id,
@@ -26,11 +36,10 @@ async def test_classify_text_description():
     }
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/api/v1/classify", json=payload)
-        assert res.status_code == 200
+        assert res.status_code == 422
         json_data = res.json()
-        assert json_data["status"] == "ok"
-        assert json_data["data"]["predicted_class"] is not None
-        assert "bin_label" in json_data["data"]["guidance"]
+        assert json_data["status"] == "error"
+        assert json_data["error"]["code"] == "INVALID_INPUT"
 
 
 @pytest.mark.asyncio
@@ -133,11 +142,16 @@ async def test_analytics_ward_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_classify_image_only_returns_unknown_demo():
-    import base64
+async def test_classify_real_image_returns_a_real_classification():
+    """An uploaded photo is answered by the ONNX model, not a simulator."""
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (320, 240), (60, 140, 60)).save(buf, format="JPEG")
+    fake_img = base64.b64encode(buf.getvalue()).decode("utf-8")
+
     session_id = str(uuid.uuid4())
-    # Use minimal valid JPEG magic bytes
-    fake_img = base64.b64encode(b'\xFF\xD8\xFF\xE0\x00\x10JFIF').decode("utf-8")
     payload = {
         "session_id": session_id,
         "input_type": "image",
@@ -149,23 +163,31 @@ async def test_classify_image_only_returns_unknown_demo():
         assert res.status_code == 200
         json_data = res.json()
         assert json_data["status"] == "ok"
-        assert json_data["data"]["predicted_class"] == "unknown"
-        assert json_data["data"]["predicted_class"] != "e_waste_mobile_charger"
-        assert json_data["data"]["confidence_label"] == "low"
-        assert json_data["meta"]["demo_mode"] is True
+
+        predicted = json_data["data"]["predicted_class"]
+        # Either a real model class or an honest low-confidence "unknown" —
+        # never a simulated material id from the removed demo pool.
+        assert predicted in BROAD_CLASSES or predicted == "unknown"
+        assert predicted not in ("plastic_pet_bottle", "e_waste_mobile_charger", "composite_tetrapack")
+
+        assert 0.0 <= json_data["data"]["confidence"] <= 1.0
+        assert json_data["data"]["confidence_label"] in ("high", "medium", "low")
+        assert len(json_data["data"]["top3"]) == 3
+        assert "bin_label" in json_data["data"]["guidance"]
+        assert "demo_mode" not in json_data["meta"]
+        assert json_data["meta"]["model_version"] == "yolo26n-cls-v1"
 
 
 @pytest.mark.asyncio
-async def test_classify_plastic_bottle_text_returns_plastic():
+async def test_classify_unsupported_upload_is_rejected():
     session_id = str(uuid.uuid4())
     payload = {
         "session_id": session_id,
-        "input_type": "text",
-        "description": "plastic water bottle",
+        "input_type": "image",
+        "image_b64": base64.b64encode(b"GIF89a" + b"\x00" * 32).decode("utf-8"),
         "consent": {"image_upload": False, "analytics": True, "location": False}
     }
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/api/v1/classify", json=payload)
-        assert res.status_code == 200
-        json_data = res.json()
-        assert json_data["data"]["predicted_class"] == "plastic_pet_bottle"
+        assert res.status_code == 415
+        assert res.json()["error"]["code"] == "UNSUPPORTED_FORMAT"
