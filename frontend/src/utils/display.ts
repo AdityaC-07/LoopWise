@@ -47,6 +47,7 @@ export function categoryColor(category: string): string {
     hazardous: 'var(--color-mat-hazardous)',
     composite: 'var(--color-mat-composite)',
     other: 'var(--color-mat-other)',
+    textile: 'var(--color-mat-textile)',
   };
   return map[category.toLowerCase()] ?? 'var(--color-mat-other)';
 }
@@ -136,8 +137,27 @@ export function friendlyWardName(wardId: string): string {
   return names[wardId] ?? wardId;
 }
 
-/** Friendly material class name (replace underscores, title-case) */
+/**
+ * Display names for the model's eight broad classes (plus the genuine
+ * low-confidence "unknown" answer). Single source of truth — every component
+ * renders class names through friendlyClassName(), never its own copy.
+ */
+const CLASS_DISPLAY_NAMES: Record<string, string> = {
+  battery_hazardous: 'Battery & Hazardous Waste',
+  glass: 'Glass',
+  metal: 'Metal',
+  organic: 'Organic Waste',
+  other_residue: 'Other / Residual Waste',
+  paper_cardboard: 'Paper & Cardboard',
+  plastic: 'Plastic',
+  textile: 'Textile',
+  unknown: 'Unknown item',
+};
+
+/** Friendly material class name (known classes mapped, else title-case) */
 export function friendlyClassName(cls: string): string {
+  const known = CLASS_DISPLAY_NAMES[cls.toLowerCase()];
+  if (known) return known;
   return cls
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());

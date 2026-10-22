@@ -4,9 +4,11 @@ import { friendlyBinLabel, binColor } from '../utils/display';
 interface BinCardProps {
   disposalBin: string;
   action: string;
+  /** Render with reduced visual weight (smaller type, icon, padding) */
+  compact?: boolean;
 }
 
-export function BinCard({ disposalBin, action }: BinCardProps) {
+export function BinCard({ disposalBin, action, compact = false }: BinCardProps) {
   const color = binColor(disposalBin);
   const label = friendlyBinLabel(disposalBin);
 
@@ -14,16 +16,19 @@ export function BinCard({ disposalBin, action }: BinCardProps) {
     <div
       className="bin-card"
       style={{
-        background: `color-mix(in srgb, ${color} 15%, var(--color-surface-1))`,
+        background: `color-mix(in srgb, ${color} ${compact ? 8 : 15}%, var(--color-surface-1))`,
         borderColor: color,
+        borderWidth: compact ? 1 : 2,
+        padding: compact ? 'var(--space-4)' : undefined,
+        gap: compact ? 'var(--space-3)' : undefined,
       }}
     >
       <div
         style={{
-          width: 48,
-          height: 48,
+          width: compact ? 36 : 48,
+          height: compact ? 36 : 48,
           borderRadius: 'var(--radius-md)',
-          background: `color-mix(in srgb, ${color} 25%, var(--color-surface-1))`,
+          background: `color-mix(in srgb, ${color} ${compact ? 14 : 25}%, var(--color-surface-1))`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -31,24 +36,24 @@ export function BinCard({ disposalBin, action }: BinCardProps) {
         }}
         aria-hidden="true"
       >
-        <Trash2 size={26} style={{ color }} />
+        <Trash2 size={compact ? 18 : 26} style={{ color, opacity: compact ? 0.85 : 1 }} />
       </div>
       <div>
         <div
           style={{
             fontFamily: 'var(--font-body)',
-            fontSize: 22,
+            fontSize: compact ? 16 : 22,
             fontWeight: 600,
             color,
-            lineHeight: 1.2,
-            marginBottom: 4,
+            lineHeight: 1.3,
+            marginBottom: compact ? 2 : 4,
           }}
         >
           {label}
         </div>
         <div
           style={{
-            fontSize: 15,
+            fontSize: compact ? 14 : 15,
             color: 'var(--color-text-secondary)',
             lineHeight: 1.5,
           }}

@@ -135,11 +135,24 @@ describe('wardStatus', () => {
 });
 
 describe('friendlyClassName', () => {
-  it('converts underscores to spaces and title-cases', () => {
+  it('converts underscores to spaces and title-cases unknown patterns', () => {
     expect(friendlyClassName('plastic_pet_bottle')).toBe('Plastic Pet Bottle');
   });
   it('handles single word', () => {
     expect(friendlyClassName('plastic')).toBe('Plastic');
+  });
+  it('maps all eight model classes to consistent display names', () => {
+    expect(friendlyClassName('battery_hazardous')).toBe('Battery & Hazardous Waste');
+    expect(friendlyClassName('glass')).toBe('Glass');
+    expect(friendlyClassName('metal')).toBe('Metal');
+    expect(friendlyClassName('organic')).toBe('Organic Waste');
+    expect(friendlyClassName('other_residue')).toBe('Other / Residual Waste');
+    expect(friendlyClassName('paper_cardboard')).toBe('Paper & Cardboard');
+    expect(friendlyClassName('plastic')).toBe('Plastic');
+    expect(friendlyClassName('textile')).toBe('Textile');
+  });
+  it('maps the genuine low-confidence unknown answer', () => {
+    expect(friendlyClassName('unknown')).toBe('Unknown item');
   });
 });
 

@@ -1,10 +1,87 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { BinCard } from '../components/BinCard';
 import { ConfidenceBar } from '../components/ConfidenceBar';
 import { MaterialBadge } from '../components/MaterialBadge';
 import { StatusLight } from '../components/StatusLight';
 import { ErrorMessage, EmptyState } from '../components/ErrorMessage';
 import { ServiceStatusIndicator } from '../components/ServiceStatusIndicator';
+import LandingPage from '../pages/LandingPage';
+
+describe('LandingPage', () => {
+  it('routes every "Identify an item" CTA to the classifier', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+    const links = screen.getAllByRole('link', { name: /identify an item/i });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link.getAttribute('href')).toBe('/classify');
+    }
+  });
+
+  it('routes dashboard CTAs to real destinations', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+    const links = screen.getAllByRole('link', { name: /dashboard/i });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      const href = link.getAttribute('href') ?? '';
+      expect(
+        href === '/analytics' ||
+        href.startsWith('/analytics/') ||
+        href.startsWith('#')
+      ).toBe(true);
+    }
+  });
+
+  it('labels the example result as illustrative, not a live prediction', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+    expect(screen.getAllByText(/illustrative example/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('Example')).toBeDefined();
+  });
+
+  it('shows the category before the bin in the showcase', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+    const text = container.textContent ?? '';
+    const catIdx = text.indexOf('Waste category');
+    const binIdx = text.indexOf('Where it goes');
+    expect(catIdx).toBeGreaterThan(-1);
+    expect(binIdx).toBeGreaterThan(catIdx);
+  });
+});
+
+describe('BinCard', () => {
+  it('renders bin label and action', () => {
+    render(<BinCard disposalBin="wet" action="Place directly into the green wet waste bin." />);
+    expect(screen.getByText('Green Wet Waste Bin')).toBeDefined();
+    expect(screen.getByText('Place directly into the green wet waste bin.')).toBeDefined();
+  });
+
+  it('renders the same content in compact mode with reduced icon size', () => {
+    const { container } = render(
+      <BinCard disposalBin="dry" action="Rinse and place in the dry waste bin." compact />
+    );
+    expect(screen.getByText('Blue Dry Waste Bin')).toBeDefined();
+    expect(screen.getByText('Rinse and place in the dry waste bin.')).toBeDefined();
+    const svg = container.querySelector('svg');
+    expect(svg?.getAttribute('width')).toBe('18');
+  });
+});
 
 describe('ConfidenceBar', () => {
   it('renders plain language label', () => {

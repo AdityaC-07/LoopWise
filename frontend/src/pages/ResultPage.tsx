@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, AlertTriangle, ChevronRight } from 'lucide-react';
 import { BinCard } from '../components/BinCard';
-import { ConfidenceBar } from '../components/ConfidenceBar';
 import { RecoveryBar } from '../components/RecoveryBar';
 import { MaterialBadge } from '../components/MaterialBadge';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -12,6 +11,7 @@ import {
   confidenceTier,
   friendlyClassName,
   binColor,
+  categoryColor,
   otherMatches,
   formatPercent,
 } from '../utils/display';
@@ -24,6 +24,7 @@ export default function ResultPage() {
   const navigate = useNavigate();
 
   const [result, setResult] = useState<ClassifyResult | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('idle');
   const [selectedCorrection, setSelectedCorrection] = useState('');
@@ -35,6 +36,7 @@ export default function ResultPage() {
     if (stored) {
       setResult(JSON.parse(stored) as ClassifyResult);
     }
+    setPhoto(sessionStorage.getItem('loopwise_result_image'));
   }, [eventId]);
 
   useEffect(() => {
@@ -94,6 +96,15 @@ export default function ResultPage() {
   }
 
   const tier = confidenceTier(result.confidence);
+  const isUnknown = result.predicted_class === 'unknown';
+  // The eight model classes get their clean category name; the genuine
+  // low-confidence answer keeps its explicit "needs manual check" wording.
+  const heroTitle = isUnknown ? result.material.name : friendlyClassName(result.predicted_class);
+  const heroSubtitle = isUnknown ? null : result.material.name;
+  const confidenceWord = (result.confidence_label || tier)
+    .charAt(0)
+    .toUpperCase() + (result.confidence_label || tier).slice(1);
+  const accent = categoryColor(result.material.category);
   // Runners-up are always worth showing: the model can be confidently wrong,
   // and the true class is usually still ranked second or third.
   const otherCandidates =
@@ -113,22 +124,78 @@ export default function ResultPage() {
         </Link>
       </div>
 
-      {/* Material name + badge */}
-      <div style={{ marginBottom: 24 }}>
-        <h1
+      {/* Classification summary — the category is the primary result */}
+      <section
+        aria-label="Classification result"
+        style={{
+          background: 'var(--color-surface-1)',
+          border: '1px solid var(--color-border)',
+          borderLeft: `3px solid ${accent}`,
+          borderRadius: 'var(--card-radius)',
+          padding: '20px',
+          marginBottom: 24,
+        }}
+      >
+        <div className="section-label">Waste category</div>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          {photo && (
+            <img
+              src={photo}
+              alt="The photo you classified"
+              style={{
+                width: 88,
+                height: 88,
+                objectFit: 'cover',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(26px, 6.5vw, 34px)',
+                fontWeight: 600,
+                color: 'var(--color-text-primary)',
+                margin: '0 0 6px',
+                lineHeight: 1.15,
+              }}
+            >
+              {heroTitle}
+            </h1>
+            {heroSubtitle && (
+              <p
+                style={{
+                  fontSize: 14,
+                  color: 'var(--color-text-secondary)',
+                  margin: '0 0 10px',
+                  lineHeight: 1.4,
+                }}
+              >
+                {heroSubtitle}
+              </p>
+            )}
+            <MaterialBadge category={result.material.category} />
+          </div>
+        </div>
+        <p
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 28,
+            margin: '14px 0 0',
+            fontSize: 14,
             fontWeight: 600,
-            color: 'var(--color-text-primary)',
-            margin: '0 0 8px',
-            lineHeight: 1.2,
+            color:
+              tier === 'high'
+                ? 'var(--color-signal-good)'
+                : tier === 'medium'
+                ? 'var(--color-signal-warn)'
+                : 'var(--color-signal-bad)',
           }}
         >
-          {result.material.name || friendlyClassName(result.predicted_class)}
-        </h1>
-        <MaterialBadge category={result.material.category} />
-      </div>
+          Model confidence: {confidenceWord}
+        </p>
+      </section>
 
       {/* Genuine low-confidence answer: ask the user to verify it manually. */}
       {result.predicted_class === 'unknown' && (
@@ -265,18 +332,14 @@ export default function ResultPage() {
         </div>
       )}
 
-      {/* BinCard */}
+      {/* Recommended bin — secondary to the category above */}
       <div id="result-bin-card" style={{ marginBottom: 24 }}>
         <div className="section-label">Where it goes</div>
         <BinCard
           disposalBin={result.material.disposal_bin}
           action={result.guidance.action}
+          compact
         />
-      </div>
-
-      {/* Confidence bar */}
-      <div id="result-confidence-bar" style={{ marginBottom: 24 }}>
-        <ConfidenceBar confidence={result.confidence} confidenceLabel={result.confidence_label} />
       </div>
 
       {/* Runners-up — the low-confidence tier already offers a full picker. */}

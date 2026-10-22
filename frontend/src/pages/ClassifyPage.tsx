@@ -95,8 +95,19 @@ export default function ClassifyPage() {
         },
       });
 
-      // Store result in sessionStorage for the result page
+      // Store result in sessionStorage for the result page. The photo preview
+      // is kept too — best-effort, since a large image can exceed the storage
+      // quota; the result page degrades gracefully without a thumbnail.
       sessionStorage.setItem('loopwise_result', JSON.stringify(result.data));
+      try {
+        if (imageB64) {
+          sessionStorage.setItem('loopwise_result_image', imageB64);
+        } else {
+          sessionStorage.removeItem('loopwise_result_image');
+        }
+      } catch {
+        sessionStorage.removeItem('loopwise_result_image');
+      }
       navigate(`/result/${result.data.event_id}`);
     } catch (err) {
       const apiErr = err as ApiError;

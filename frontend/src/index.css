@@ -47,6 +47,7 @@
   --color-mat-hazardous:    #C47A4A;
   --color-mat-composite:    #7A8B6E;
   --color-mat-other:        #6E8A72;
+  --color-mat-textile:      #A98BA0;
 
   /* Recovery channel colours */
   --color-channel-informal:   #F5A623;
@@ -794,6 +795,207 @@ body {
   .landing-header {
     padding: 0 var(--space-4);
   }
+}
+
+/* ── Landing page refinements ───────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+section[id] {
+  scroll-margin-top: calc(var(--layout-topbar-height) + 12px);
+}
+
+.landing-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-amber);
+}
+
+.landing-hero-shell {
+  position: relative;
+  overflow: hidden;
+}
+.landing-hero-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(900px 420px at 78% 16%, rgba(245, 166, 35, 0.07), transparent 60%),
+    radial-gradient(700px 520px at 10% 0%, rgba(93, 191, 110, 0.05), transparent 55%);
+  pointer-events: none;
+}
+
+.landing-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.3;
+}
+
+/* Showcase: layered depth — a quiet offset frame behind the main card */
+.landing-showcase-shell {
+  position: relative;
+}
+.landing-showcase-shell::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: -10px;
+  bottom: -10px;
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--card-radius) + 4px);
+  background: var(--color-surface-1);
+}
+.landing-showcase {
+  position: relative;
+}
+.landing-showcase-media {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background:
+    radial-gradient(circle at 50% 38%,
+      color-mix(in srgb, var(--color-mat-plastic) 16%, var(--color-surface-2)),
+      var(--color-surface-2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.landing-scan {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 22%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-amber), transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: landing-scan-sweep 2400ms ease-in-out 500ms 1 both;
+}
+
+/* Connected "how it works" process (desktop connector line) */
+.landing-steps-grid {
+  position: relative;
+}
+@media (min-width: 1024px) {
+  .landing-steps-grid::before {
+    content: '';
+    position: absolute;
+    top: 40px;
+    left: 17%;
+    right: 17%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-border-strong) 20%, var(--color-border-strong) 80%, transparent);
+  }
+}
+.landing-step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-amber-dim);
+  border: 1px solid color-mix(in srgb, var(--color-amber) 45%, transparent);
+  color: var(--color-amber);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.landing-step-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-amber);
+}
+
+/* Circular-economy flow chain */
+.landing-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.landing-flow-node {
+  flex: 1 1 200px;
+  max-width: 270px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.landing-flow-arrow {
+  align-self: center;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+@media (max-width: 767px) {
+  .landing-flow-arrow {
+    transform: rotate(90deg);
+  }
+}
+
+/* Restrained entrance animation (duration neutralised by global reduced-motion rule) */
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.landing-fade-up {
+  animation: landing-fade-up 550ms ease-out both;
+}
+
+@keyframes landing-scan-sweep {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(120px);
+    opacity: 0;
+  }
+}
+.landing-scan {
+  animation: landing-scan-sweep 2400ms ease-in-out 500ms 1 both;
 }
 
 /* ── Reduced motion ───────────────────────────────────────── */
